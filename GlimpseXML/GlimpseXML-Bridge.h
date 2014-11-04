@@ -6,8 +6,13 @@
 //  Copyright (c) 2014 glimpse.io. All rights reserved.
 //
 
-// this is a hack: we set this flag for all frameworks in Glimpse-Common.xcconfig's GCC_PREPROCESSOR_DEFINITIONS setting; this reason is that if this isn't ifdef'd out, for non-Glimpse builds, then importing code from Glimpse.playground tries to import these headers, but without the additional HEADER_SEARCH_PATHS=$(SDKROOT)/usr/include/libxml2, the relative paths can't be resolved (and there doesn't appear to be any way to set header search paths for a playground); note that a module.modulemap doesn't help, because that also cannot be found by the playground
-#if LIBXML2_HEADER_SEARCH_PATHS
+/*
+    We need to import libxml headers for the GlimpseXML module itself, but we don't want to expose them to external modules because then they would need to all add the libxml2 include directory to their header search paths, so only inlude the headers when we are building the framework itself with:
+
+    GCC_PREPROCESSOR_DEFINITIONS = GLIMPSEXML_FRAMEWORK
+ */
+#if GLIMPSEXML_FRAMEWORK
+
 #import <libxml/tree.h>
 #import <libxml/parser.h>
 #import <libxml/xmlstring.h>
@@ -23,4 +28,3 @@ void GlimpseXMLGenericErrorCallbackCreate(GlimpseXMLGenericErrorCallback callbac
 void GlimpseXMLGenericErrorCallbackDestroy();
 
 #endif
-

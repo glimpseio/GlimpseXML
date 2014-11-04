@@ -7,27 +7,23 @@
 //
 
 
+/*
+    These Void typealiases exist becuase if an external module references the GlimpseXML module when any of the classes reference any of the xml* structs in any way (function returns, private properties, etc), then the compiler will crash unless those modules themselves import the $(SDKROOT)/usr/include/libxml2 headers (which we don't want to require). So while the first commented-out typealiases will allow the GlimpseXML module to build, no other module can reference it.
+*/
 
-//private typealias DocumentPtr = UnsafeMutablePointer<xmlDoc>
-//private typealias NodePtr = UnsafeMutablePointer<xmlNode>
-//private typealias NamespacePtr = UnsafeMutablePointer<xmlNs>
+//private typealias DocumentPtr = UnsafePointer<xmlDoc>
+//private typealias NodePtr = UnsafePointer<xmlNode>
+//private typealias NamespacePtr = UnsafePointer<xmlNs>
 
-private typealias DocumentPtr = UnsafeMutablePointer<Void>
-private typealias NodePtr = UnsafeMutablePointer<Void>
-private typealias NamespacePtr = UnsafeMutablePointer<Void>
+private typealias DocumentPtr = UnsafePointer<Void>
+private typealias NodePtr = UnsafePointer<Void>
+private typealias NamespacePtr = UnsafePointer<Void>
 
 
-private func castDoc(doc: DocumentPtr)->xmlDocPtr {
-    return UnsafeMutablePointer<xmlDoc>(doc)
-}
+private func castDoc(doc: DocumentPtr)->xmlDocPtr { return UnsafeMutablePointer<xmlDoc>(doc) }
+private func castNode(node: NodePtr)->xmlNodePtr { return UnsafeMutablePointer<xmlNode>(node) }
+private func castNs(ns: NamespacePtr)->xmlNsPtr { return UnsafeMutablePointer<xmlNs>(ns) }
 
-private func castNode(node: NodePtr)->xmlNodePtr {
-    return UnsafeMutablePointer<xmlNode>(node)
-}
-
-private func castNs(ns: NamespacePtr)->xmlNsPtr {
-    return UnsafeMutablePointer<xmlNs>(ns)
-}
 
 /// The root of an XML Document, containing a single root element
 public final class Document: Equatable, Hashable, Printable {

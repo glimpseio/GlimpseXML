@@ -277,18 +277,25 @@ class GlimpseXMLTests: XCTestCase {
         }
     }
 
+    /// Tests all the xml test files from libxml, assuming it is located at ../../ext/libxml
     func testLoadLibxmlTests() {
-        let dir = "/opt/src/impathic/ext/libxml/test"
-        let fm = NSFileManager.defaultManager()
 
-        if let enumerator = fm.enumeratorAtPath(dir) {
-            for file in enumerator.allObjects.map({ "\(dir)/\($0)" }).filter({ $0.hasSuffix(".xml") }) {
-                autoreleasepool {
-                    let doc = Document.parseFile(file)
-                    let nodes = doc.value?.xpath("//*")
-                    println("parsed \(file) nodes: \(nodes?.value?.count ?? -1) error: \(doc.error)")
+        let dir = __FILE__.stringByDeletingLastPathComponent + "/../../../ext/libxml/test"
+
+        if let enumerator = NSFileManager.defaultManager().enumeratorAtPath(dir) {
+            let files: NSArray = enumerator.allObjects.map({ "\(dir)/\($0)" }).filter({ $0.hasSuffix(".xml") })
+
+            // concurrent enumeration will veryify that the tests work
+            files.enumerateObjectsWithOptions(.Concurrent, usingBlock: { (file, index, keepGoing) -> Void in
+                let doc = Document.parseFile(file as String)
+                let nodes = doc.value?.xpath("//*")
+                // println("parsed \(file) nodes: \(nodes?.value?.count ?? -1) error: \(doc.error)")
+                if let nodes = nodes?.value {
+                    XCTAssert(nodes.count > 0)
                 }
-            }
+            })
+        } else {
+            XCTFail("no libxml test files found")
         }
     }
 }

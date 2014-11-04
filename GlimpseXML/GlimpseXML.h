@@ -15,3 +15,4 @@ FOUNDATION_EXPORT double GlimpseXMLVersionNumber;
 FOUNDATION_EXPORT const unsigned char GlimpseXMLVersionString[];
 
 // In this header, you should import all the public headers of your framework using statements like #import <GlimpseXML/PublicHeader.h>
+//#import <GlimpseXML/GlimpseXML-Bridge.h>
