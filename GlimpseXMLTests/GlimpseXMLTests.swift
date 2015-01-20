@@ -306,6 +306,6 @@ private func <- <T>(inout assignee: T?, assignation: T) -> T {
     assignee = assignation
     return assignation
 }
-infix operator <- {}
+infix operator <- { assignment }
 
 

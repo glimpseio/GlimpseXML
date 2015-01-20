@@ -25,13 +25,17 @@ private func castNode(node: NodePtr)->xmlNodePtr { return UnsafeMutablePointer<x
 private func castNs(ns: NamespacePtr)->xmlNsPtr { return UnsafeMutablePointer<xmlNs>(ns) }
 
 
+private var parserinit: Void = xmlInitParser() // lazy var that needs to be called to initialize libxml threads
+
 /// The root of an XML Document, containing a single root element
 public final class Document: Equatable, Hashable, Printable {
     private let docPtr: DocumentPtr
     private var ownsDoc: Bool
 
+
     /// Creates a new Document with the given version string and root node
     public init(version: String? = nil, root: Node? = nil) {
+        let pinit: Void = parserinit // ensure lazy var is invoked
         self.ownsDoc = true
         self.docPtr = version != nil ? DocumentPtr(xmlNewDoc(version!)) : DocumentPtr(xmlNewDoc(nil))
 
@@ -48,6 +52,7 @@ public final class Document: Equatable, Hashable, Printable {
     }
 
     private init(doc: DocumentPtr, owns: Bool) {
+        let pinit: Void = parserinit // ensure lazy var is invoked
         self.ownsDoc = owns
         self.docPtr = doc
     }
@@ -95,17 +100,12 @@ public final class Document: Equatable, Hashable, Printable {
 
     /// Parses the XML contained in the given string, returning the Document or an Error
     public class func parseString(xmlString: String, encoding: String? = nil) -> XMLResult<Document> {
-        var chars = [CUnsignedChar]()
-        chars += xmlString.utf8
-
-        let cchars: UnsafePointer<CChar> = UnsafePointer(chars)
-        return parseData(cchars, length: chars.count)
+        return xmlString.withCString { self.parseData($0, length: Int(strlen($0))) }
     }
 
     /// Parses the XML contained in the given data, returning the Document or an Error
     public class func parseData(xmlData: UnsafePointer<CChar>, length: Int, encoding: String? = nil) -> XMLResult<Document> {
-        let len = Int32(length)
-        return parse(XMLLoadSource.Data(data: xmlData, length: len), encoding: encoding)
+        return parse(XMLLoadSource.Data(data: xmlData, length: Int32(length)), encoding: encoding)
     }
 
     /// Parses the XML contained at the given filename, returning the Document or an Error
@@ -119,16 +119,19 @@ public final class Document: Equatable, Hashable, Printable {
         case Data(data: UnsafePointer<CChar>, length: Int32)
     }
 
-    private class func parse(source: XMLLoadSource, encoding: String?) -> XMLResult<Document> {
-
-        // XMLStructuredErrorCallbackCreate({ msg in NSLog("#### error: \(Error(error: msg))") })
-        GlimpseXMLGenericErrorCallbackCreate(nil) // squelch errors from going to stderr
+    private class func parse(source: XMLLoadSource, encoding: String?, stderr: Bool = false) -> XMLResult<Document> {
+        let pinit: Void = parserinit // ensure lazy var is invoked
+        precondition(xmlHasFeature(XML_WITH_THREAD) != 0)
 
         // var x: xmlParserOption = XML_PARSE_NOCDATA
         var opts : Int32 = 0
 
         let ctx = xmlNewParserCtxt()
         var doc: xmlDocPtr?
+
+        if !stderr {
+            GlimpseXMLGenericErrorCallbackCreate(nil) // squelch errors from going to stderr
+        }
 
         switch source {
         case .File(let fileName):
@@ -145,9 +148,12 @@ public final class Document: Equatable, Hashable, Printable {
             }
         }
 
+        if !stderr {
+            GlimpseXMLGenericErrorCallbackDestroy() // clear the error handler
+        }
+
         let err = errorFromXmlError(ctx.memory.lastError)
         xmlFreeParserCtxt(ctx);
-        GlimpseXMLGenericErrorCallbackDestroy() // clear the error handler
 
         if let doc = doc {
             if doc != nil { // unwrapped pointer can still be nil
@@ -179,7 +185,6 @@ public final class Node: Equatable, Hashable, Printable {
 
     public init(doc: Document? = nil, cdata: String) {
         self.ownsNode = doc == nil
-
         self.nodePtr = NodePtr(xmlNewCDataBlock(doc == nil ? nil : castDoc(doc!.docPtr), cdata, Int32(cdata.nulTerminatedUTF8.count)))
     }
 
