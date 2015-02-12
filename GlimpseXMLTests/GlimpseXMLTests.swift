@@ -24,9 +24,53 @@ class GlimpseXMLTests: XCTestCase {
         }
     }
 
+    func testXMLParseDemo() {
+        // iTunes Library Location <http://support.apple.com/en-us/HT201610>
+        let music = "~/Music/iTunes/iTunes Music Library.xml".stringByExpandingTildeInPath
+        let parsed = GlimpseXML.Document.parseFile(music)
+        switch parsed {
+            case .Error(let err):
+                println("Error: \(err)")
+            case .Value(let val):
+                let doc: Document = val.value
+
+                let rootNodeName: String? = doc.rootElement.name
+                println("Library Type: \(rootNodeName)")
+
+                let trackCount = doc.xpath("/plist/dict/key[text()='Tracks']/following-sibling::dict/key").value?.first?.text
+                println("Track Count: \(trackCount)")
+
+                let dq = doc.xpath("//key[text()='Artist']/following-sibling::string[text()='Bob Dylan']").value?.count
+                println("Dylan Quotient: \(dq)")
+        }
+    }
+
+    func testXMLWriteDemo() {
+
+        let node = Node(name: "library", attributes: [("url", "glimpse.io")], children: [
+            Node(name: "inventory", children: [
+                Node(name: "book", attributes: [("checkout", "true")], children: [
+                    Node(name: "title", text: "I am a Bunny" ),
+                    Node(name: "author", text: "Richard Scarry"),
+                    ]),
+                Node(name: "book", attributes: [("checkout", "false")], children: [
+                    Node(name: "title", text: "You were a Bunny" ),
+                    Node(name: "author", text: "Scarry Richard"),
+                    ]),
+                ]),
+            ])
+
+        let compact: String = node.serialize()
+        let formatted: String = node.serialize(indent: true)
+
+        let doc = Document(root: node)
+        let encoded: String = doc.serialize(indent: false, encoding: "ISO-8859-1")
+
+    }
+
     func testXMLParseErrors() {
         let parsed1 = Document.parseString("<xmlXXX>foo</xml>")
-        XCTAssertEqual(parsed1.description, "error: Parser Fatal [1:21]: Opening and ending tag mismatch: xmlXXX line 1 and xml\n")
+        XCTAssertEqual(parsed1.debugDescription, "error: Parser Fatal [1:21]: Opening and ending tag mismatch: xmlXXX line 1 and xml\n")
     }
 
     func testNamespaces() {
@@ -136,7 +180,7 @@ class GlimpseXMLTests: XCTestCase {
         if let doc3 = parse3.value {
             XCTAssertEqual(doc3.serialize(indent: true), doc.serialize(indent: true))
         } else {
-            XCTFail(parse3.error!.description)
+            XCTFail(parse3.error!.debugDescription)
         }
 
         XCTAssertEqual(1, doc.xpath("//company").value?.count ?? -1)
@@ -153,7 +197,7 @@ class GlimpseXMLTests: XCTestCase {
         XCTAssertEqual(2, fname?.parent?.xpath("../..//employee").value?.count ?? -1)
         XCTAssertEqual(1, fname?.parent?.xpath("./fname[text() = 'Markus']").value?.count ?? -1)
 
-        XCTAssertEqual("XPath Error [0:0]: ", doc.xpath("+").error?.description ?? "NOERROR")
+        XCTAssertEqual("XPath Error [0:0]: ", doc.xpath("+").error?.debugDescription ?? "NOERROR")
 
         doc.xpath("/company/employees/employee/fname[text() = 'Emily']").value?.first?.text = "Emilius"
 
@@ -263,41 +307,63 @@ class GlimpseXMLTests: XCTestCase {
             if let parsedDoc = parsed.value {
                 XCTAssertEqual(1, doc.xpath("//blah[text() = '\(chars)']").value?.count ?? -1)
             } else {
-                XCTFail(parsed.error!.description)
+                XCTFail(parsed.error!.debugDescription)
             }
         }
     }
 
-    // enable this to run a perpetual memory profiline test
-    func DISABLEDtestLoadTestsProfiling() {
-        for _ in 1...999999 {
-            autoreleasepool({ [unowned self] () -> () in
-                self.testLoadLibxmlTests()
-            })
-        }
-    }
-
-    /// Tests all the xml test files from libxml, assuming it is located at ../../ext/libxml
-    func testLoadLibxmlTests() {
-
+    func enumerateLibXMLTests(f: String->Void) {
         let dir = "/opt/src/libxml"
 
         if let enumerator = NSFileManager.defaultManager().enumeratorAtPath(dir) {
             let files: NSArray = enumerator.allObjects.map({ "\(dir)/\($0)" }).filter({ $0.hasSuffix(".xml") })
 
-            // concurrent enumeration will veryify that the tests work
+            // concurrent enumeration will verify that multi-threaded access works
             files.enumerateObjectsWithOptions(.Concurrent, usingBlock: { (file, index, keepGoing) -> Void in
-                let doc = Document.parseFile("\(file)")
-                let nodes = doc.value?.xpath("//*")
-                // println("parsed \(file) nodes: \(nodes?.value?.count ?? -1) error: \(doc.error)")
-                if let nodes = nodes?.value {
-                    XCTAssert(nodes.count > 0)
-                }
+                f("\(file)")
             })
         } else {
-            // XCTFail("no libxml test files found") // it's fine; we don't need to have them
+            XCTFail("no libxml test files found") // it's fine; we don't need to have them
         }
     }
+
+    func testLoadTestsProfiling() {
+        measureBlock { self.testLoadLibxmlTests() }
+    }
+
+    /// Tests all the xml test files from libxml
+    func testLoadLibxmlTests() {
+        enumerateLibXMLTests { file in
+            let doc = Document.parseFile(file)
+            let nodes = doc.value?.xpath("//*")
+            // println("parsed \(file) nodes: \(nodes?.value?.count ?? -1) error: \(doc.error)")
+            if let nodes = nodes?.value {
+                XCTAssert(nodes.count > 0)
+            }
+        }
+    }
+
+//    func testNSLoadTestsProfiling() {
+//        measureBlock { self.testNSLoadLibxmlTests() }
+//    }
+//
+//    func testNSLoadLibxmlTests() {
+//        // some files crash NSXMLParser!
+//        let skip = ["xmltutorial.xml", "badcomment.xml", "defattr2.xml", "example-8.xml", "xmlbase-c14n11spec-102.xml", "xmlbase-c14n11spec2-102.xml"]
+//
+//        enumerateLibXMLTests { file in
+//            if contains(skip, file.lastPathComponent) {
+//                return
+//            }
+//            var error: NSError?
+//            println("parsing: \(file)")
+//            let doc = NSXMLDocument(contentsOfURL: NSURL(fileURLWithPath: file)!, options: 0, error: &error)
+//            let nodes = doc?.nodesForXPath("//*", error: &error)
+//            if let nodes = nodes {
+//                XCTAssert(nodes.count > 0)
+//            }
+//        }
+//    }
 }
 
 

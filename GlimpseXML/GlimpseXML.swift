@@ -28,7 +28,7 @@ private func castNs(ns: NamespacePtr)->xmlNsPtr { return UnsafeMutablePointer<xm
 private var parserinit: Void = xmlInitParser() // lazy var that needs to be called to initialize libxml threads
 
 /// The root of an XML Document, containing a single root element
-public final class Document: Equatable, Hashable, Printable {
+public final class Document: Equatable, Hashable, DebugPrintable {
     private let docPtr: DocumentPtr
     private var ownsDoc: Bool
 
@@ -92,7 +92,7 @@ public final class Document: Equatable, Hashable, Printable {
         return string
     }
 
-    public var description: String { return serialize() ?? "<XMLDocument>" }
+    public var debugDescription: String { return serialize() ?? "<XMLDocument>" }
 
     public var rootElement: Node {
         get { return Node(node: NodePtr(xmlDocGetRootElement(castDoc(docPtr))), owns: false) }
@@ -174,7 +174,7 @@ public func ==(lhs: Document, rhs: Document) -> Bool {
 
 
 /// A Node in an Document
-public final class Node: Equatable, Hashable, Printable {
+public final class Node: Equatable, Hashable, DebugPrintable {
     private let nodePtr: NodePtr
     private var ownsNode: Bool
 
@@ -441,7 +441,7 @@ public final class Node: Equatable, Hashable, Printable {
         return docPtr == nil ? nil : Document(doc: DocumentPtr(docPtr), owns: false)
     }
 
-    public var description: String {
+    public var debugDescription: String {
         return "[\(nodeType)]: \(serialize())"
     }
 
@@ -572,11 +572,11 @@ public class Namespace {
 /// MARK: General Utilities
 
 /// The result of an XML operation, which may be a T or an Error condition
-public enum XMLResult<T>: Printable {
+public enum XMLResult<T>: DebugPrintable {
     case Value(XMLValue<T>)
     case Error(XMLError)
 
-    public var description: String {
+    public var debugDescription: String {
         switch self {
         case .Value(let v): return "value: \(v)"
         case .Error(let e): return "error: \(e)"
@@ -606,11 +606,11 @@ public class XMLValue<T> {
 }
 
 // A stuctured XML parse of processing error
-public struct XMLError: Printable {
-    public enum ErrorLevel: Printable {
+public struct XMLError: DebugPrintable {
+    public enum ErrorLevel: DebugPrintable {
         case None, Warning, Error, Fatal
 
-        public var description: String {
+        public var debugDescription: String {
             switch self {
             case None: return "None"
             case Warning: return "Warning"
@@ -621,10 +621,10 @@ public struct XMLError: Printable {
     }
 
     /// The domain (type) of error that occurred
-    public enum ErrorDomain: UInt, Printable {
+    public enum ErrorDomain: UInt, DebugPrintable {
         case None, Parser, Tree, Namespace, DTD, HTML, Memory, Output, IO, FTP, HTTP, XInclude, XPath, XPointer, Regexp, Datatype, SchemasP, SchemasV, RelaxNGP, RelaxNGV, Catalog, C14N, XSLT, Valid, Check, Writer, Module, I18N, SchematronV, Buffer, URI
 
-        public var description: String {
+        public var debugDescription: String {
             switch self {
             case None: return "None"
             case Parser: return "Parser"
@@ -716,7 +716,7 @@ public struct XMLError: Printable {
         self.init(domain: ErrorDomain.None, code: 0, message: message, level: ErrorLevel.Fatal, file: "", line: 0, str1: "", str2: "", str3: "", int1: 0, column: 0)
     }
 
-    public var description: String {
+    public var debugDescription: String {
         return "\(domain) \(level) [\(line):\(column)]: \(message)"
     }
 }

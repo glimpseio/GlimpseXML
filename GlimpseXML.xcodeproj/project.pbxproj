@@ -25,6 +25,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		7E0E4D441A8CEDEF00D3830F /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		7E1878BE19ECB7DC00487429 /* GlimpseXML.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = GlimpseXML.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E1878C219ECB7DC00487429 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		7E1878C319ECB7DC00487429 /* GlimpseXML.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GlimpseXML.h; sourceTree = "<group>"; };
@@ -69,6 +70,7 @@
 		7E1878B419ECB7DC00487429 = {
 			isa = PBXGroup;
 			children = (
+				7E0E4D441A8CEDEF00D3830F /* README.md */,
 				7E1878C019ECB7DC00487429 /* GlimpseXML */,
 				7E1878CD19ECB7DC00487429 /* GlimpseXMLTests */,
 				7E1878BF19ECB7DC00487429 /* Products */,
