@@ -158,7 +158,7 @@ public final class Document: Equatable, Hashable, Printable {
         if let doc = doc {
             if doc != nil { // unwrapped pointer can still be nil
                 let document = Document(doc: DocumentPtr(doc), owns: true)
-                return .Value(document)
+                return .Value(XMLValue(document))
             }
         }
 
@@ -497,7 +497,7 @@ public final class Node: Equatable, Hashable, Printable {
                 }
                 xmlXPathFreeObject(xpathObj)
                 xmlXPathFreeContext(xpathCtx)
-                return cleanup(.Value(results))
+                return cleanup(.Value(XMLValue(results)))
             } else {
                 let lastError = xpathCtx.memory.lastError
                 let error = errorFromXmlError(lastError)
@@ -506,7 +506,7 @@ public final class Node: Equatable, Hashable, Printable {
             }
         }
 
-        return cleanup(.Error(Error(message: "Unknown XPath error")))
+        return cleanup(.Error(XMLError(message: "Unknown XPath error")))
     }
 }
 
@@ -523,12 +523,12 @@ public func +=(lhs: Node, rhs: Node) -> Node {
 }
 
 
-private func errorFromXmlError(error: xmlError)->Error {
+private func errorFromXmlError(error: xmlError)->XMLError {
     let level = errorLevelFromXmlErrorLevel(error.level)
-    return Error(domain: Error.ErrorDomain.fromErrorDomain(error.domain), code: error.code, message: String.fromCString(error.message) ?? "", level: level, file: String.fromCString(error.file) ?? "", line: error.line, str1: String.fromCString(error.str1) ?? "", str2: String.fromCString(error.str2) ?? "", str3: String.fromCString(error.str3) ?? "", int1: error.int1, column: error.int2)
+    return XMLError(domain: XMLError.ErrorDomain.fromErrorDomain(error.domain), code: error.code, message: String.fromCString(error.message) ?? "", level: level, file: String.fromCString(error.file) ?? "", line: error.line, str1: String.fromCString(error.str1) ?? "", str2: String.fromCString(error.str2) ?? "", str3: String.fromCString(error.str3) ?? "", int1: error.int1, column: error.int2)
 }
 
-private func errorLevelFromXmlErrorLevel(level: xmlErrorLevel) -> Error.ErrorLevel {
+private func errorLevelFromXmlErrorLevel(level: xmlErrorLevel) -> XMLError.ErrorLevel {
     switch level.value {
     case XML_ERR_NONE.value: return .None
     case XML_ERR_WARNING.value: return .Warning
@@ -573,24 +573,24 @@ public class Namespace {
 
 /// The result of an XML operation, which may be a T or an Error condition
 public enum XMLResult<T>: Printable {
-    case Value(@autoclosure ()->T)
-    case Error(GlimpseXML.Error)
+    case Value(XMLValue<T>)
+    case Error(XMLError)
 
     public var description: String {
         switch self {
-        case .Value(let v): return "value: \(v())"
+        case .Value(let v): return "value: \(v)"
         case .Error(let e): return "error: \(e)"
         }
     }
 
     public var value: T? {
         switch self {
-        case .Value(let v): return v()
+        case .Value(let v): return v.value
         case .Error(let e): return nil
         }
     }
 
-    public var error: GlimpseXML.Error? {
+    public var error: XMLError? {
         switch self {
         case .Value(let v): return nil
         case .Error(let e): return e
@@ -599,8 +599,14 @@ public enum XMLResult<T>: Printable {
 
 }
 
+/// Wrapper for a generic value; workaround for Swift enum generic deficiency
+public class XMLValue<T> {
+    public let value: T
+    public init(_ value: T) { self.value = value }
+}
+
 // A stuctured XML parse of processing error
-public struct Error: Printable {
+public struct XMLError: Printable {
     public enum ErrorLevel: Printable {
         case None, Warning, Error, Fatal
 
