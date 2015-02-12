@@ -7,6 +7,8 @@ Fast DOM parser & serializer in pure Swift for iOS & Mac
 ### Parsing & XPath Example
 
 ```swift
+import GlimpseXML
+
 let music = "~/Music/iTunes/iTunes Music Library.xml".stringByExpandingTildeInPath
 let parsed = GlimpseXML.Document.parseFile(music)
 switch parsed {
@@ -29,7 +31,12 @@ switch parsed {
 
 ### Generating & Serializing Example
 
+You can manually create an XML DOM using `Glimpse.XML` Node elements. Convenience constructors are provided
+in order to make tree construction naturally fit the hierarchy of an XML document.
+
 ```swift
+import GlimpseXML
+
 let node = Node(name: "library", attributes: [("url", "glimpse.io")], children: [
     Node(name: "inventory", children: [
         Node(name: "book", attributes: [("checkout", "true")], children: [
