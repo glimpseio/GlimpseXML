@@ -1,0 +1,6 @@
+language: objective-c
+xcode_project: GlimpseXML.xcodeproj
+xcode_scheme: GlimpseXML
+xcode_sdk: iphonesimulator8.1
+# script: xctool -project GlimpseXML.xcodeproj -scheme GlimpseXML -sdk iphonesimulator -destination platform='iOS Simulator',name='iPad Retina',OS='8.1' clean test
+script: xcodebuild test -project GlimpseXML.xcodeproj -scheme GlimpseXML -sdk iphonesimulator ONLY_ACTIVE_ARCH=NO
