@@ -323,7 +323,7 @@ class GlimpseXMLTests: XCTestCase {
                 f("\(file)")
             })
         } else {
-            XCTFail("no libxml test files found") // it's fine; we don't need to have them
+            // XCTFail("no libxml test files found") // it's fine; we don't need to have them
         }
     }
 
