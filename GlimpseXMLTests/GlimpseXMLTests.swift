@@ -61,10 +61,14 @@ class GlimpseXMLTests: XCTestCase {
             ])
 
         let compact: String = node.serialize()
+        println(compact)
+
         let formatted: String = node.serialize(indent: true)
+        println(formatted)
 
         let doc = Document(root: node)
-        let encoded: String = doc.serialize(indent: false, encoding: "ISO-8859-1")
+        let encoded: String = doc.serialize(indent: true, encoding: "ISO-8859-1")
+        println(encoded)
 
     }
 

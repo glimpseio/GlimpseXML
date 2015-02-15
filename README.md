@@ -6,7 +6,9 @@ Fast DOM parser & serializer in pure Swift for iOS & Mac
 
 ### Parsing & XPath Example
 
-```swift
+````swift
+import GlimpseXML
+
 let music = "~/Music/iTunes/iTunes Music Library.xml".stringByExpandingTildeInPath
 let parsed = GlimpseXML.Document.parseFile(music)
 switch parsed {
@@ -25,11 +27,16 @@ switch parsed {
         let dq = doc.xpath("//key[text()='Artist']/following-sibling::string[text()='Bob Dylan']").value?.count
         println("Dylan Quotient: \(dq)")
 }
-```
+````
 
 ### Generating & Serializing Example
 
-```swift
+You can manually create an XML DOM using `Glimpse.XML` Node elements. Convenience constructors are provided
+in order to make tree construction naturally fit the hierarchy of an XML document.
+
+````swift
+import GlimpseXML
+
 let node = Node(name: "library", attributes: [("url", "glimpse.io")], children: [
     Node(name: "inventory", children: [
         Node(name: "book", attributes: [("checkout", "true")], children: [
@@ -42,15 +49,68 @@ let node = Node(name: "library", attributes: [("url", "glimpse.io")], children: 
             ]),
         ]),
     ])
+````
 
+You can also serialize the node to a String:
+
+````swift
 let compact: String = node.serialize()
+println(compact)
+````
+
+Yielding:
+
+````xml
+<library url="glimpse.io"><inventory><book checkout="true"><title>I am a Bunny</title><author>Richard Scarry</author></book><book checkout="false"><title>You were a Bunny</title><author>Scarry Richard</author></book></inventory></library>
+````
+
+With formatting:
+
+````swift
 let formatted: String = node.serialize(indent: true)
+println(formatted)
+````
 
+````xml
+<library url="glimpse.io">
+  <inventory>
+    <book checkout="true">
+      <title>I am a Bunny</title>
+      <author>Richard Scarry</author>
+    </book>
+    <book checkout="false">
+      <title>You were a Bunny</title>
+      <author>Scarry Richard</author>
+    </book>
+  </inventory>
+</library>
+````
+
+You can also include a doc header with an encoding by wrapping the Node in a Document:
+
+````swift
 let doc = Document(root: node)
-let encoded: String = doc.serialize(indent: false, encoding: "ISO-8859-1")
+let encoded: String = doc.serialize(indent: true, encoding: "ISO-8859-1")
+println(encoded)
+````
 
-```
+Which will output:
 
+````xml
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<library url="glimpse.io">
+  <inventory>
+    <book checkout="true">
+      <title>I am a Bunny</title>
+      <author>Richard Scarry</author>
+    </book>
+    <book checkout="false">
+      <title>You were a Bunny</title>
+      <author>Scarry Richard</author>
+    </book>
+  </inventory>
+</library>
+````
 
 ### Setting up GlimpseXML
 
