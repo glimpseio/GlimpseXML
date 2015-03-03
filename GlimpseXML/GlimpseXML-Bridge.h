@@ -13,18 +13,20 @@
  */
 #if GLIMPSEXML_FRAMEWORK
 
-#import <libxml/tree.h>
-#import <libxml/parser.h>
-#import <libxml/xmlstring.h>
-#import <libxml/xpath.h>
-#import <libxml/xpathinternals.h>
+void myGenericErrorFunc(void *ctx, const char *msg, ...);
 
-typedef void (^GlimpseXMLStructuredErrorCallback)(struct _xmlError error);
-void GlimpseXMLStructuredErrorCallbackCreate(GlimpseXMLStructuredErrorCallback callback);
-void GlimpseXMLStructuredErrorCallbackDestroy();
-
-typedef void (^GlimpseXMLGenericErrorCallback)(const char *msg);
-void GlimpseXMLGenericErrorCallbackCreate(GlimpseXMLGenericErrorCallback callback);
-void GlimpseXMLGenericErrorCallbackDestroy();
+//#import <libxml/tree.h>
+//#import <libxml/parser.h>
+//#import <libxml/xmlstring.h>
+//#import <libxml/xpath.h>
+//#import <libxml/xpathinternals.h>
+//
+//typedef void (^GlimpseXMLStructuredErrorCallback)(struct _xmlError error);
+//void GlimpseXMLStructuredErrorCallbackCreate(GlimpseXMLStructuredErrorCallback callback);
+//void GlimpseXMLStructuredErrorCallbackDestroy();
+//
+//typedef void (^GlimpseXMLGenericErrorCallback)(const char *msg);
+//void GlimpseXMLGenericErrorCallbackCreate(GlimpseXMLGenericErrorCallback callback);
+//void GlimpseXMLGenericErrorCallbackDestroy();
 
 #endif

@@ -6,26 +6,30 @@
 //  Copyright (c) 2014 glimpse.io. All rights reserved.
 //
 
+import libxml2
 
-/*
-    These Void typealiases exist becuase if an external module references the GlimpseXML module when any of the classes reference any of the xml* structs in any way (function returns, private properties, etc), then the compiler will crash unless those modules themselves import the $(SDKROOT)/usr/include/libxml2 headers (which we don't want to require). So while the first commented-out typealiases will allow the GlimpseXML module to build, no other module can reference it.
-*/
-
-//private typealias DocumentPtr = UnsafePointer<xmlDoc>
-//private typealias NodePtr = UnsafePointer<xmlNode>
-//private typealias NamespacePtr = UnsafePointer<xmlNs>
-
-private typealias DocumentPtr = UnsafePointer<Void>
-private typealias NodePtr = UnsafePointer<Void>
-private typealias NamespacePtr = UnsafePointer<Void>
-
+private typealias DocumentPtr = UnsafePointer<xmlDoc>
+private typealias NodePtr = UnsafePointer<xmlNode>
+private typealias NamespacePtr = UnsafePointer<xmlNs>
 
 private func castDoc(doc: DocumentPtr)->xmlDocPtr { return UnsafeMutablePointer<xmlDoc>(doc) }
 private func castNode(node: NodePtr)->xmlNodePtr { return UnsafeMutablePointer<xmlNode>(node) }
 private func castNs(ns: NamespacePtr)->xmlNsPtr { return UnsafeMutablePointer<xmlNs>(ns) }
 
 
-private var parserinit: Void = xmlInitParser() // lazy var that needs to be called to initialize libxml threads
+private var parserinit: Void = {
+    xmlInitParser() // lazy var that needs to be called to initialize libxml threads
+
+    // TODO: init the generic error handler so we don't output all parse errors to stdout
+//    private let xmllog = tmpfile()
+//    xmlSetGenericErrorFunc(xmllog, nil)
+//    var fun = CFunctionPointer<Void>()
+//    let errout = stdout
+//    let devnull: UnsafeMutablePointer<FILE> = fopen("/dev/null", O_WRONLY) // where we send error messages
+//    let devnullptr = UnsafePointer(devnull)
+//    initGenericErrorDefaultFunc(&myGenericErrorFunc)
+
+}()
 
 /// The root of an XML Document, containing a single root element
 public final class Document: Equatable, Hashable, DebugPrintable {
@@ -65,6 +69,11 @@ public final class Document: Equatable, Hashable, DebugPrintable {
 
     public var hashValue: Int { return 0 }
 
+    /// Create a curried xpath finder with the given namespaces
+    public func xpath(ns: [String:String]? = nil)(_ path: String) -> XMLResult<[Node]> {
+        return rootElement.xpath(path, namespaces: ns)
+    }
+
     public func xpath(path: String, namespaces: [String:String]? = nil) -> XMLResult<[Node]> {
         return rootElement.xpath(path, namespaces: namespaces)
     }
@@ -82,8 +91,7 @@ public final class Document: Equatable, Hashable, DebugPrintable {
 
         var string: String = ""
         if buflen >= 0 {
-            let cchars: UnsafePointer<CChar> = UnsafePointer(buf)
-            if let str = stringFromFixedCString(cchars, Int(buflen)) {
+            if let str = stringFromFixedCString(UnsafeBufferPointer(start: UnsafePointer(buf), count: Int(buflen))) {
                 string = str
             }
             buf.dealloc(Int(buflen))
@@ -130,7 +138,7 @@ public final class Document: Equatable, Hashable, DebugPrintable {
         var doc: xmlDocPtr?
 
         if !stderr {
-            GlimpseXMLGenericErrorCallbackCreate(nil) // squelch errors from going to stderr
+//            GlimpseXMLGenericErrorCallbackCreate(nil) // squelch errors from going to stderr
         }
 
         switch source {
@@ -149,7 +157,7 @@ public final class Document: Equatable, Hashable, DebugPrintable {
         }
 
         if !stderr {
-            GlimpseXMLGenericErrorCallbackDestroy() // clear the error handler
+//            GlimpseXMLGenericErrorCallbackDestroy() // clear the error handler
         }
 
         let err = errorFromXmlError(ctx.memory.lastError)
@@ -425,8 +433,7 @@ public final class Node: Equatable, Hashable, DebugPrintable {
         if result >= 0 {
             let buflen: Int32 = xmlBufferLength(buf)
             let str: UnsafePointer<CUnsignedChar> = xmlBufferContent(buf)
-            let cchars: UnsafePointer<CChar> = UnsafePointer(str)
-            if let str = stringFromFixedCString(cchars, Int(buflen)) {
+            if let str = stringFromFixedCString(UnsafeBufferPointer(start: UnsafePointer(str), count: Int(buflen))) {
                 string = str
             }
         }
@@ -448,9 +455,9 @@ public final class Node: Equatable, Hashable, DebugPrintable {
     /// Evaluates the given xpath and returns matching nodes
     public func xpath(path: String, namespaces: [String:String]? = nil) -> XMLResult<[Node]> {
 
-        GlimpseXMLGenericErrorCallbackCreate(nil) // squelch errors from going to stderr
+//        GlimpseXMLGenericErrorCallbackCreate(nil) // squelch errors from going to stderr
         var cleanup: (XMLResult<[Node]>)->XMLResult<[Node]> = {
-            GlimpseXMLGenericErrorCallbackDestroy() // clear the error handler
+//            GlimpseXMLGenericErrorCallbackDestroy() // clear the error handler
             return $0
         }
 
@@ -469,7 +476,7 @@ public final class Node: Equatable, Hashable, DebugPrintable {
                 xmlUnlinkNode(topParent)
                 xmlSetTreeDoc(topParent, nil)
                 xmlFreeDoc(nodeDoc)
-                GlimpseXMLGenericErrorCallbackDestroy()
+//                GlimpseXMLGenericErrorCallbackDestroy()
                 return $0
             }
         }
@@ -726,13 +733,10 @@ private func stringFromXMLString(string: UnsafePointer<xmlChar>) -> String? {
     return String.fromCString(UnsafePointer(string))
 }
 
-private func stringFromFixedCString(cs: UnsafePointer<CChar>, length: Int) -> String? {
-    // taken from <http://stackoverflow.com/questions/25042695/swift-converting-from-unsafepointeruint8-with-length-to-string>
-    let buflen = length + 1
-    var buf = UnsafeMutablePointer<CChar>.alloc(buflen)
-    memcpy(buf, cs, UInt(length))
-    buf[length] = 0 // zero terminate
-    let s = String.fromCString(buf)
-    buf.dealloc(buflen)
+private func stringFromFixedCString(cs: UnsafeBufferPointer<CChar>) -> String? {
+    var buf = UnsafeMutablePointer<CChar>.alloc(cs.count + 1)
+    buf.initializeFrom(cs + [0]) // tack on a zero to make it a valid c string
+    let (s, err) = String.fromCStringRepairingIllFormedUTF8(buf)
+    buf.dealloc(cs.count + 1)
     return s
 }
