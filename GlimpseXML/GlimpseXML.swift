@@ -730,7 +730,7 @@ private func stringFromFixedCString(cs: UnsafePointer<CChar>, length: Int) -> St
     // taken from <http://stackoverflow.com/questions/25042695/swift-converting-from-unsafepointeruint8-with-length-to-string>
     let buflen = length + 1
     var buf = UnsafeMutablePointer<CChar>.alloc(buflen)
-    memcpy(buf, cs, UInt(length))
+    memcpy(buf, cs, length)
     buf[length] = 0 // zero terminate
     let s = String.fromCString(buf)
     buf.dealloc(buflen)
