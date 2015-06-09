@@ -176,6 +176,7 @@
 		7E1878B519ECB7DC00487429 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+				LastSwiftUpdateCheck = 0700;
 				LastUpgradeCheck = 0620;
 				ORGANIZATIONNAME = glimpse.io;
 				TargetAttributes = {
