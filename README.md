@@ -10,23 +10,15 @@ Fast DOM parser & serializer in pure Swift for iOS & Mac
 import GlimpseXML
 
 let music = "~/Music/iTunes/iTunes Music Library.xml".stringByExpandingTildeInPath
-let parsed = GlimpseXML.Document.parseFile(music)
-switch parsed {
-    case .Error(let err):
-        println("Error: \(err)")
+let doc = try GlimpseXML.Document.parseFile(music)
+let rootNodeName: String? = doc.rootElement.name
+println("Library Type: \(rootNodeName)")
 
-    case .Value(let val):
-        let doc: Document = val.value
+let trackCount = doc.xpath("/plist/dict/key[text()='Tracks']/following-sibling::dict/key").value?.first?.text
+println("Track Count: \(trackCount)")
 
-        let rootNodeName: String? = doc.rootElement.name
-        println("Library Type: \(rootNodeName)")
-
-        let trackCount = doc.xpath("/plist/dict/key[text()='Tracks']/following-sibling::dict/key").value?.first?.text
-        println("Track Count: \(trackCount)")
-
-        let dq = doc.xpath("//key[text()='Artist']/following-sibling::string[text()='Bob Dylan']").value?.count
-        println("Dylan Quotient: \(dq)")
-}
+let dq = doc.xpath("//key[text()='Artist']/following-sibling::string[text()='Bob Dylan']").value?.count
+println("Dylan Quotient: \(dq)")
 ````
 
 ### Generating & Serializing Example

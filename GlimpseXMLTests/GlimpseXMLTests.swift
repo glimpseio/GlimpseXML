@@ -14,24 +14,44 @@ class GlimpseXMLTests: XCTestCase {
     func testXMLParsing() {
         let xml = "<?xml version=\"1.0\" encoding=\"gbk\"?>\n<res><body><msgtype>12</msgtype><langflag>zh_CN</langflag><engineid>1</engineid><tokensn>1000000001</tokensn><dynamicpass>111111</dynamicpass><emptyfield/></body></res>\n"
 
-        let value = try! Document.parseString(xml)
+        do {
+            let value = try Document.parseString(xml)
 
-        XCTAssertEqual(xml, value.serialize(indent: false, encoding: nil) ?? "")
-        XCTAssertNotEqual(xml, value.serialize(indent: true, encoding: nil) ?? "")
+            XCTAssertEqual(xml, value.serialize(indent: false, encoding: nil) ?? "")
+            XCTAssertNotEqual(xml, value.serialize(indent: true, encoding: nil) ?? "")
+        } catch {
+            XCTFail(String(error))
+        }
+    }
+
+    func testHTMLParsing() {
+        let html = "<html><head><title>Some HTML!</title><body><p>Some paragraph<br>Another Line</body></html>" // malformed
+
+        do {
+            let value = try Document.parseString(html, html: true)
+
+            XCTAssertEqual("<?xml version=\"1.0\" standalone=\"yes\"?>\n<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\" \"http://www.w3.org/TR/REC-html40/loose.dtd\">\n<html><head><title>Some HTML!</title></head><body><p>Some paragraph<br/>Another Line</p></body></html>\n", value.serialize(indent: false, encoding: nil) ?? "")
+        } catch {
+            XCTFail(String(error))
+        }
     }
 
     func testXMLParseDemo() {
         // iTunes Library Location <http://support.apple.com/en-us/HT201610>
         let music = "~/Music/iTunes/iTunes Music Library.xml".stringByExpandingTildeInPath
-        let doc = try! GlimpseXML.Document.parseFile(music)
-        let rootNodeName: String? = doc.rootElement.name
-        print("Library Type: \(rootNodeName)")
+        do {
+            let doc = try GlimpseXML.Document.parseFile(music)
+            let rootNodeName: String? = doc.rootElement.name
+            print("Library Type: \(rootNodeName)")
 
-        let trackCount = try! doc.xpath("/plist/dict/key[text()='Tracks']/following-sibling::dict/key").first?.text
-        print("Track Count: \(trackCount)")
+            let trackCount = try doc.xpath("/plist/dict/key[text()='Tracks']/following-sibling::dict/key").first?.text
+            print("Track Count: \(trackCount)")
 
-        let dq = try! doc.xpath("//key[text()='Artist']/following-sibling::string[text()='Bob Dylan']").count
-        print("Dylan Quotient: \(dq)")
+            let dq = try doc.xpath("//key[text()='Artist']/following-sibling::string[text()='Bob Dylan']").count
+            print("Dylan Quotient: \(dq)")
+        } catch {
+            XCTFail(String(error))
+        }
     }
 
     func testXMLWriteDemo() {
@@ -320,7 +340,7 @@ class GlimpseXMLTests: XCTestCase {
         }
     }
 
-    func testLoadTestsProfiling() {
+    func XXXtestLoadTestsProfiling() {
         measureBlock { self.testLoadLibxmlTests() }
     }
 

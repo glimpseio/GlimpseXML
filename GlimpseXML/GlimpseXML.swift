@@ -96,12 +96,13 @@ public final class Document: Equatable, Hashable, CustomDebugStringConvertible {
     }
 
     /// Parses the XML contained in the given string, returning the Document or an Error
-    public class func parseString(xmlString: String, encoding: String? = nil) throws -> Document {
+    public class func parseString(xmlString: String, encoding: String? = nil, html: Bool = false) throws -> Document {
         var doc: Document?
         var err: ErrorType?
+        // FIXME: withCString doesn't declare rethrows, so we need to hold value & error in bogus optionals
         let _: Void = xmlString.withCString { str in
             do {
-                doc = try self.parseData(str, length: Int(strlen(str)))
+                doc = try self.parseData(str, length: Int(strlen(str)), html: html)
             } catch {
                 err = error
             }
@@ -111,13 +112,13 @@ public final class Document: Equatable, Hashable, CustomDebugStringConvertible {
     }
 
     /// Parses the XML contained in the given data, returning the Document or an Error
-    public class func parseData(xmlData: UnsafePointer<CChar>, length: Int, encoding: String? = nil) throws -> Document {
-        return try parse(XMLLoadSource.Data(data: xmlData, length: Int32(length)), encoding: encoding)
+    public class func parseData(xmlData: UnsafePointer<CChar>, length: Int, encoding: String? = nil, html: Bool = false) throws -> Document {
+        return try parse(.Data(data: xmlData, length: Int32(length)), encoding: encoding, html: html)
     }
 
     /// Parses the XML contained at the given filename, returning the Document or an Error
-    public class func parseFile(fileName: String, encoding: String? = nil) throws -> Document {
-        return try parse(.File(fileName: fileName), encoding: encoding)
+    public class func parseFile(fileName: String, encoding: String? = nil, html: Bool = false) throws -> Document {
+        return try parse(.File(fileName: fileName), encoding: encoding, html: html)
     }
 
     /// The source of the loading for the XML data
@@ -126,35 +127,57 @@ public final class Document: Equatable, Hashable, CustomDebugStringConvertible {
         case Data(data: UnsafePointer<CChar>, length: Int32)
     }
 
-    private class func parse(source: XMLLoadSource, encoding: String?, stderr: Bool = false) throws -> Document {
+    private class func parse(source: XMLLoadSource, encoding: String?, html: Bool) throws -> Document {
         xmlInitParser()
         precondition(xmlHasFeature(XML_WITH_THREAD) != 0)
         xmlSetStructuredErrorFunc(nil) { ctx, err in } // squelch errors going to stdout
         defer { xmlSetStructuredErrorFunc(nil, nil) }
 
-        // var x: xmlParserOption = XML_PARSE_NOCDATA
-        let opts : Int32 = 0
+        let opts : Int32 = Int32(XML_PARSE_NONET.rawValue)
 
-        let ctx = xmlNewParserCtxt()
-        var doc: xmlDocPtr?
+        if html {
+            precondition(xmlHasFeature(XML_WITH_HTML) != 0)
+        }
 
-        switch source {
-        case .File(let fileName):
-            if let encoding = encoding {
-                doc = xmlCtxtReadFile(ctx, fileName, encoding, Int32(opts))
+        let ctx = html ? htmlNewParserCtxt() : xmlNewParserCtxt()
+        defer {
+            if html {
+                htmlFreeParserCtxt(ctx)
             } else {
-                doc = xmlCtxtReadFile(ctx, fileName, nil, Int32(opts))
+                xmlFreeParserCtxt(ctx)
             }
-        case .Data(let data, let length):
+        }
+
+        var doc: xmlDocPtr? // also htmlDocPtr: “Most of the back-end structures from XML and HTML are shared.”
+
+        switch (html, source) {
+        case (false, .File(let fileName)):
             if let encoding = encoding {
-                doc = xmlCtxtReadMemory(ctx, data, length, nil, encoding, Int32(opts))
+                doc = xmlCtxtReadFile(ctx, fileName, encoding, opts)
             } else {
-                doc = xmlCtxtReadMemory(ctx, data, length, nil, nil, Int32(opts))
+                doc = xmlCtxtReadFile(ctx, fileName, nil, opts)
+            }
+        case (false, .Data(let data, let length)):
+            if let encoding = encoding {
+                doc = xmlCtxtReadMemory(ctx, data, length, nil, encoding, opts)
+            } else {
+                doc = xmlCtxtReadMemory(ctx, data, length, nil, nil, opts)
+            }
+        case (true, .File(let fileName)):
+            if let encoding = encoding {
+                doc = htmlCtxtReadFile(ctx, fileName, encoding, opts)
+            } else {
+                doc = htmlCtxtReadFile(ctx, fileName, nil, opts)
+            }
+        case (true, .Data(let data, let length)):
+            if let encoding = encoding {
+                doc = htmlCtxtReadMemory(ctx, data, length, nil, encoding, opts)
+            } else {
+                doc = htmlCtxtReadMemory(ctx, data, length, nil, nil, opts)
             }
         }
 
         let err = errorFromXmlError(ctx.memory.lastError)
-        xmlFreeParserCtxt(ctx);
 
         if let doc = doc {
             if doc != nil { // unwrapped pointer can still be nil
@@ -467,38 +490,37 @@ public final class Node: Equatable, Hashable, CustomDebugStringConvertible {
         }
 
         let xpathCtx = xmlXPathNewContext(nodeDoc)
+        defer { xmlXPathFreeContext(xpathCtx) }
 
-        if xpathCtx != nil {
-            if let namespaces = namespaces {
-                for (prefix, uri) in namespaces {
-                    xmlXPathRegisterNs(xpathCtx, prefix, uri)
-                }
-            }
+        if xpathCtx == nil {
+            throw XMLError(message: "Could not create XPath context")
+        }
 
-            let xpathObj = xmlXPathNodeEval(castNode(nodePtr), path, xpathCtx)
-            if xpathObj != nil {
-                var results = [Node]()
-                let nodeSet = xpathObj.memory.nodesetval
-                if nodeSet != nil {
-                    for var index = 0, count = Int(nodeSet.memory.nodeNr); index < count; index++ {
-                        let node = nodeSet.memory.nodeTab[index]
-                        if node != nil {
-                            results += [Node(node: NodePtr(node), owns: false)]
-                        }
-                    }
-                }
-                xmlXPathFreeObject(xpathObj)
-                xmlXPathFreeContext(xpathCtx)
-                return results
-            } else {
-                let lastError = xpathCtx.memory.lastError
-                let error = errorFromXmlError(lastError)
-                xmlXPathFreeContext(xpathCtx)
-                throw error
+        if let namespaces = namespaces {
+            for (prefix, uri) in namespaces {
+                xmlXPathRegisterNs(xpathCtx, prefix, uri)
             }
         }
 
-        throw XMLError(message: "Unknown XPath error")
+        let xpathObj = xmlXPathNodeEval(castNode(nodePtr), path, xpathCtx)
+        if xpathObj == nil {
+            let lastError = xpathCtx.memory.lastError
+            let error = errorFromXmlError(lastError)
+            throw error
+        }
+        defer { xmlXPathFreeObject(xpathObj) }
+
+        var results = [Node]()
+        let nodeSet = xpathObj.memory.nodesetval
+        if nodeSet != nil {
+            for var index = 0, count = Int(nodeSet.memory.nodeNr); index < count; index++ {
+                let node = nodeSet.memory.nodeTab[index]
+                if node != nil {
+                    results += [Node(node: NodePtr(node), owns: false)]
+                }
+            }
+        }
+        return results
     }
 }
 
