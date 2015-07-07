@@ -9,6 +9,22 @@
 import GlimpseXML
 import XCTest
 
+/// Temporary (hopefully) shims for XCTAssert methods that can accept throwables
+extension XCTestCase {
+    /// Same as XCTAssertEqual, but handles throwable autoclosures
+    func XCTAssertEqualX<T: Equatable>(@autoclosure v1: () throws -> T, @autoclosure _ v2: () throws -> T, file: String = __FILE__, line: UInt = __LINE__) {
+        do {
+            let x1 = try v1()
+            let x2 = try v2()
+            if x1 != x2 {
+                XCTFail("Not equal", file: file, line: line)
+            }
+        } catch {
+            XCTFail(String(error), file: file, line: line)
+        }
+    }
+}
+
 class GlimpseXMLTests: XCTestCase {
 
     func testXMLParsing() {
@@ -126,10 +142,11 @@ class GlimpseXMLTests: XCTestCase {
         XCTAssertEqual("<stuff attr1=\"val2\" ex:attrname=\"attrvalue\"><child1/><child2>Child Contents</child2></stuff>", node.serialize())
 
         let doc = Document(root: node)
-        XCTAssertEqual(1, try! doc.xpath("/stuff/child1").count ?? -1)
+        XCTAssertEqualX(1, try doc.xpath("/stuff/child1").count ?? -1)
 
         XCTAssertNotNil(ns)
     }
+
 
     func testXMLTree() {
 
@@ -155,9 +172,9 @@ class GlimpseXMLTests: XCTestCase {
         XCTAssertEqual(1, fname?.children.count ?? -1)
         XCTAssertEqual(1, lname?.children.count ?? -1)
 
-//        XCTAssertEqual(1, try! rootNode.xpath("//company").count)
-//        XCTAssertEqual(1, try! rootNode.xpath("../company").count)
-//        XCTAssertEqual(2, try! rootNode.xpath("./employees/employee").count)
+//        XCTAssertEqualX(1, try rootNode.xpath("//company").count)
+//        XCTAssertEqualX(1, try rootNode.xpath("../company").count)
+//        XCTAssertEqualX(2, try rootNode.xpath("./employees/employee").count)
 
         XCTAssertEqual("employee", fname?.parent?.name ?? "<null>")
         XCTAssertEqual("true", fname?.parent?["active"] ?? "<null>")
@@ -197,40 +214,44 @@ class GlimpseXMLTests: XCTestCase {
         fname?.parent?.prev?.prev = fname?.parent
         XCTAssertEqual("<?xml version=\"1.0\" encoding=\"utf8\"?>\n<company name=\"impathic\"><employees><employee><fname>Markus</fname><lastName>Prud'hommeaux</lastName></employee><employee><fname>Emily</fname><lastName>Tucker</lastName></employee></employees></company>\n", doc.serialize())
 
-        let parse3 = try! Document.parseString(doc.serialize())
-        XCTAssertEqual(parse3.serialize(indent: true), doc.serialize(indent: true))
+        do {
+            let parse3 = try Document.parseString(doc.serialize())
+            XCTAssertEqual(parse3.serialize(indent: true), doc.serialize(indent: true))
 
-        XCTAssertEqual(1, try! doc.xpath("//company").count)
-        XCTAssertEqual(1, try! doc.xpath("//company[@name = 'impathic']").count)
-        XCTAssertEqual(1, try! doc.xpath("//employees").count)
-        XCTAssertEqual(2, try! doc.xpath("//employee").count)
-        XCTAssertEqual(2, try! doc.xpath("/company/employees/employee").count)
-        XCTAssertEqual(1, try! doc.xpath("/company/employees/employee/fname[text() != 'Emily']").count)
-        XCTAssertEqual(1, try! doc.xpath("/company/employees/employee/fname[text() = 'Emily']").count)
-        XCTAssertEqual(1, try! doc.xpath("/company/employees/employee/fname[text() = 'Markus']").count)
+            XCTAssertEqualX(1, try doc.xpath("//company").count)
+            XCTAssertEqualX(1, try doc.xpath("//company[@name = 'impathic']").count)
+            XCTAssertEqualX(1, try doc.xpath("//employees").count)
+            XCTAssertEqualX(2, try doc.xpath("//employee").count)
+            XCTAssertEqualX(2, try doc.xpath("/company/employees/employee").count)
+            XCTAssertEqualX(1, try doc.xpath("/company/employees/employee/fname[text() != 'Emily']").count)
+            XCTAssertEqualX(1, try doc.xpath("/company/employees/employee/fname[text() = 'Emily']").count)
+            XCTAssertEqualX(1, try doc.xpath("/company/employees/employee/fname[text() = 'Markus']").count)
 
 
-        XCTAssertEqual(2, try! fname?.parent?.xpath("../employee").count ?? -1)
-        XCTAssertEqual(2, try! fname?.parent?.xpath("../..//employee").count ?? -1)
-        XCTAssertEqual(1, try! fname?.parent?.xpath("./fname[text() = 'Markus']").count ?? -1)
+            XCTAssertEqualX(2, try fname?.parent?.xpath("../employee").count ?? -1)
+            XCTAssertEqualX(2, try fname?.parent?.xpath("../..//employee").count ?? -1)
+            XCTAssertEqualX(1, try fname?.parent?.xpath("./fname[text() = 'Markus']").count ?? -1)
 
-//        XCTAssertEqual("XPath Error [0:0]: ", doc.xpath("+").error?.debugDescription ?? "NOERROR")
+            // XCTAssertEqual("XPath Error [0:0]: ", doc.xpath("+").error?.debugDescription ?? "NOERROR")
+            
+            try doc.xpath("/company/employees/employee/fname[text() = 'Emily']").first?.text = "Emilius"
 
-        try! doc.xpath("/company/employees/employee/fname[text() = 'Emily']").first?.text = "Emilius"
+            XCTAssertEqualX(0, try doc.xpath("/company/employees/employee/fname[text() = 'Emily']").count)
 
-        XCTAssertEqual(0, try! doc.xpath("/company/employees/employee/fname[text() = 'Emily']").count)
+            XCTAssertEqual("<?xml version=\"1.0\" encoding=\"utf8\"?>\n<company name=\"impathic\"><employees><employee><fname>Markus</fname><lastName>Prud'hommeaux</lastName></employee><employee><fname>Emilius</fname><lastName>Tucker</lastName></employee></employees></company>\n", doc.serialize())
 
-        XCTAssertEqual("<?xml version=\"1.0\" encoding=\"utf8\"?>\n<company name=\"impathic\"><employees><employee><fname>Markus</fname><lastName>Prud'hommeaux</lastName></employee><employee><fname>Emilius</fname><lastName>Tucker</lastName></employee></employees></company>\n", doc.serialize())
+            try doc.xpath("/company").first? += Node(name: "descriptionText", children: [
+                Node(text: "This is a super awesome company! It is > than the others & it is cool too!!")
+                ])
 
-        try! doc.xpath("/company").first? += Node(name: "descriptionText", children: [
-            Node(text: "This is a super awesome company! It is > than the others & it is cool too!!")
-            ])
+            try doc.xpath("/company").first? += Node(name: "descriptionData", children: [
+                Node(cdata: "This is a super awesome company! It is > than the others & it is cool too!!"),
+                ])
 
-        try! doc.xpath("/company").first? += Node(name: "descriptionData", children: [
-            Node(cdata: "This is a super awesome company! It is > than the others & it is cool too!!"),
-            ])
-
-        XCTAssertEqual("<?xml version=\"1.0\" encoding=\"utf8\"?>\n<company name=\"impathic\"><employees><employee><fname>Markus</fname><lastName>Prud'hommeaux</lastName></employee><employee><fname>Emilius</fname><lastName>Tucker</lastName></employee></employees><descriptionText>This is a super awesome company! It is &gt; than the others &amp; it is cool too!!</descriptionText><descriptionData><![CDATA[This is a super awesome company! It is > than the others & it is cool too!!]]></descriptionData></company>\n", doc.serialize())
+            XCTAssertEqual("<?xml version=\"1.0\" encoding=\"utf8\"?>\n<company name=\"impathic\"><employees><employee><fname>Markus</fname><lastName>Prud'hommeaux</lastName></employee><employee><fname>Emilius</fname><lastName>Tucker</lastName></employee></employees><descriptionText>This is a super awesome company! It is &gt; than the others &amp; it is cool too!!</descriptionText><descriptionData><![CDATA[This is a super awesome company! It is > than the others & it is cool too!!]]></descriptionData></company>\n", doc.serialize())
+        } catch {
+            XCTFail(String(error))
+        }
     }
 
     func testUnicodeEncoding() {
@@ -320,8 +341,12 @@ class GlimpseXMLTests: XCTestCase {
             XCTAssertTrue((data as NSString).containsString(chars))
             // println("data: [\(data.lengthOfBytesUsingEncoding(NSUTF8StringEncoding))] \(data)")
 
-            let parsed = try! Document.parseString(data)
-            XCTAssertEqual(1, try! parsed.xpath("//blah[text() = '\(chars)']").count ?? -1)
+            do {
+                let parsed = try Document.parseString(data)
+                XCTAssertEqualX(1, try parsed.xpath("//blah[text() = '\(chars)']").count ?? -1)
+            } catch {
+                XCTFail(String(error))
+            }
         }
     }
 
