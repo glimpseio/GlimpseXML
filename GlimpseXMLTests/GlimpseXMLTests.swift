@@ -86,15 +86,17 @@ class GlimpseXMLTests: XCTestCase {
             ])
 
         let compact: String = node.serialize()
-        print(compact)
+        //print(compact)
+        XCTAssertFalse(compact.isEmpty)
 
         let formatted: String = node.serialize(indent: true)
-        print(formatted)
+        //print(formatted)
+        XCTAssertFalse(formatted.isEmpty)
 
         let doc = Document(root: node)
         let encoded: String = doc.serialize(indent: true, encoding: "ISO-8859-1")
-        print(encoded)
-
+        //print(encoded)
+        XCTAssertFalse(encoded.isEmpty)
     }
 
     func testXMLParseErrors() {
