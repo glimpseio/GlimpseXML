@@ -223,7 +223,7 @@ public final class Node: Equatable, Hashable, CustomDebugStringConvertible {
 
         self.nodePtr = NodePtr(xmlNewDocNode(doc == nil ? nil : castDoc(doc!.docPtr), namespace == nil ? nil : castNs(namespace!.nsPtr), name ?? "", text ?? ""))
 
-        attributes?.map { self.updateAttribute($0, value: $1, namespace: namespace) }
+        let _ = attributes?.map { self.updateAttribute($0, value: $1, namespace: namespace) }
 
         if let children = children {
             self.children = children
