@@ -262,6 +262,7 @@ public final class Node: Equatable, Hashable, CustomDebugStringConvertible {
     /// The text content of the node
     public var text: String? {
         get { return stringFromXMLString(xmlNodeGetContent(castNode(nodePtr)), free: true) }
+
         set(value) {
             if let value = value {
                 xmlNodeSetContent(castNode(nodePtr), value)
