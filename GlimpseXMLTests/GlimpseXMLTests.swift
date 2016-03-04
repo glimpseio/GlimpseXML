@@ -55,6 +55,8 @@ class GlimpseXMLTests: XCTestCase {
     func testXMLParseDemo() {
         // iTunes Library Location <http://support.apple.com/en-us/HT201610>
         let music = ("~/Music/iTunes/iTunes Music Library.xml" as NSString).stringByExpandingTildeInPath
+        if !NSFileManager.defaultManager().fileExistsAtPath(music) { return }
+
         do {
             let doc = try GlimpseXML.Document.parseFile(music)
             let rootNodeName: String? = doc.rootElement.name
