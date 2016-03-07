@@ -237,7 +237,7 @@ public final class Node: Equatable, Hashable, DebugPrintable {
 
     /// The text content of the node
     public var text: String? {
-        get { return stringFromXMLString(xmlNodeGetContent(castNode(nodePtr))) }
+        get { return stringFromXMLString(xmlNodeGetContent(castNode(nodePtr)), free: true) }
         set(value) {
             if let value = value {
                 xmlNodeSetContent(castNode(nodePtr), value)
@@ -721,9 +721,12 @@ public struct XMLError: DebugPrintable {
     }
 }
 
-
-private func stringFromXMLString(string: UnsafePointer<xmlChar>) -> String? {
-    return String.fromCString(UnsafePointer(string))
+private func stringFromXMLString(string: UnsafePointer<xmlChar>, free: Bool = false) -> String? {
+    let str = String.fromCString(UnsafePointer(string))
+    if free {
+        xmlFree(UnsafeMutablePointer<Void>(string))
+    }
+    return str
 }
 
 private func stringFromFixedCString(cs: UnsafePointer<CChar>, length: Int) -> String? {
