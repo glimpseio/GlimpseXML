@@ -12,7 +12,7 @@ import XCTest
 /// Temporary (hopefully) shims for XCTAssert methods that can accept throwables
 extension XCTestCase {
     /// Same as XCTAssertEqual, but handles throwable autoclosures
-    func XCTAssertEqualX<T: Equatable>(@autoclosure v1: () throws -> T, @autoclosure _ v2: () throws -> T, file: String = __FILE__, line: UInt = __LINE__) {
+    func XCTAssertEqualX<T: Equatable>(@autoclosure v1: () throws -> T, @autoclosure _ v2: () throws -> T, file: StaticString = #file, line: UInt = #line) {
         do {
             let x1 = try v1()
             let x2 = try v2()
