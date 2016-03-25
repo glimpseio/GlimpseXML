@@ -59,7 +59,7 @@ public final class Document: Equatable, Hashable, CustomDebugStringConvertible {
     public var hashValue: Int { return 0 }
 
     /// Create a curried xpath finder with the given namespaces
-    public func xpath(ns: [String:String]? = nil)(_ path: String) throws -> [Node] {
+    public func xpath(ns: [String:String]? = nil, _ path: String) throws -> [Node] {
         return try rootElement.xpath(path, namespaces: ns)
     }
 
@@ -327,15 +327,17 @@ public final class Node: Equatable, Hashable, CustomDebugStringConvertible {
     public var children: [Node] {
         get {
             var nodes = [Node]()
-            for var child = castNode(nodePtr).memory.children; child != nil; child = child.memory.next {
+            var child = castNode(nodePtr).memory.children
+            while child != nil {
+                defer { child = child.memory.next }
                 nodes += [Node(node: NodePtr(child), owns: false)]
             }
             return nodes
         }
 
         set(newChildren) {
-            children.map { $0.detach() } // remove existing children from parent
-            newChildren.map { self.addChild($0) }
+            for child in children { child.detach() } // remove existing children from parent
+            for child in newChildren { addChild(child) }
         }
     }
 
@@ -514,7 +516,10 @@ public final class Node: Equatable, Hashable, CustomDebugStringConvertible {
         var results = [Node]()
         let nodeSet = xpathObj.memory.nodesetval
         if nodeSet != nil {
-            for var index = 0, count = Int(nodeSet.memory.nodeNr); index < count; index++ {
+            let count = Int(nodeSet.memory.nodeNr)
+            var index = 0
+            while index < count {
+                defer { index += 1 }
                 let node = nodeSet.memory.nodeTab[index]
                 if node != nil {
                     results += [Node(node: NodePtr(node), owns: false)]
