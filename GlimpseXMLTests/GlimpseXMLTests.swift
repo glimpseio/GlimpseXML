@@ -27,7 +27,7 @@ extension XCTestCase {
 
 class GlimpseXMLTests: XCTestCase {
 
-    func testXMLParsing() {
+    func testXMLParsing() throws {
         let xml = "<?xml version=\"1.0\" encoding=\"gbk\"?>\n<res><body><msgtype>12</msgtype><langflag>zh_CN</langflag><engineid>1</engineid><tokensn>1000000001</tokensn><dynamicpass>111111</dynamicpass><emptyfield/></body></res>\n"
 
         do {
@@ -35,24 +35,20 @@ class GlimpseXMLTests: XCTestCase {
 
             XCTAssertEqual(xml, value.serialize(indent: false, encoding: nil) ?? "")
             XCTAssertNotEqual(xml, value.serialize(indent: true, encoding: nil) ?? "")
-        } catch {
-            XCTFail(String(error))
         }
     }
 
-    func testHTMLParsing() {
+    func testHTMLParsing() throws {
         let html = "<html><head><title>Some HTML!</title><body><p>Some paragraph<br>Another Line</body></html>" // malformed
 
         do {
             let value = try Document.parseString(html, html: true)
 
             XCTAssertEqual("<?xml version=\"1.0\" standalone=\"yes\"?>\n<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\" \"http://www.w3.org/TR/REC-html40/loose.dtd\">\n<html><head><title>Some HTML!</title></head><body><p>Some paragraph<br/>Another Line</p></body></html>\n", value.serialize(indent: false, encoding: nil) ?? "")
-        } catch {
-            XCTFail(String(error))
         }
     }
 
-    func testXMLParseDemo() {
+    func testXMLParseDemo() throws {
         // iTunes Library Location <http://support.apple.com/en-us/HT201610>
         let music = ("~/Music/iTunes/iTunes Music Library.xml" as NSString).stringByExpandingTildeInPath
         if !NSFileManager.defaultManager().fileExistsAtPath(music) { return }
@@ -67,8 +63,6 @@ class GlimpseXMLTests: XCTestCase {
 
             let dq = try doc.xpath("//key[text()='Artist']/following-sibling::string[text()='Bob Dylan']").count
             print("Dylan Quotient: \(dq)")
-        } catch {
-            XCTFail(String(error))
         }
     }
 
@@ -152,7 +146,7 @@ class GlimpseXMLTests: XCTestCase {
     }
 
 
-    func testXMLTree() {
+    func testXMLTree() throws {
 
         XCTAssertEqual(Node(name: "parent", text: "Text Content").serialize(), Node(name: "parent", children: [ Node(text: "Text Content") ]).serialize())
 
@@ -253,8 +247,6 @@ class GlimpseXMLTests: XCTestCase {
                 ])
 
             XCTAssertEqual("<?xml version=\"1.0\" encoding=\"utf8\"?>\n<company name=\"impathic\"><employees><employee><fname>Markus</fname><lastName>Prud'hommeaux</lastName></employee><employee><fname>Emilius</fname><lastName>Tucker</lastName></employee></employees><descriptionText>This is a super awesome company! It is &gt; than the others &amp; it is cool too!!</descriptionText><descriptionData><![CDATA[This is a super awesome company! It is > than the others & it is cool too!!]]></descriptionData></company>\n", doc.serialize())
-        } catch {
-            XCTFail(String(error))
         }
     }
 
