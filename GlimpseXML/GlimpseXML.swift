@@ -6,36 +6,30 @@
 //  Copyright (c) 2014 glimpse.io. All rights reserved.
 //
 
+import libxml2
 
-/*
-    These Void typealiases exist becuase if an external module references the GlimpseXML module when any of the classes reference any of the xml* structs in any way (function returns, private properties, etc), then the compiler will crash unless those modules themselves import the $(SDKROOT)/usr/include/libxml2 headers (which we don't want to require). So while the first commented-out typealiases will allow the GlimpseXML module to build, no other module can reference it.
-*/
-
-//private typealias DocumentPtr = UnsafePointer<xmlDoc>
-//private typealias NodePtr = UnsafePointer<xmlNode>
-//private typealias NamespacePtr = UnsafePointer<xmlNs>
-
-private typealias DocumentPtr = UnsafePointer<Void>
-private typealias NodePtr = UnsafePointer<Void>
-private typealias NamespacePtr = UnsafePointer<Void>
-
+private typealias DocumentPtr = UnsafePointer<xmlDoc>
+private typealias NodePtr = UnsafePointer<xmlNode>
+private typealias NamespacePtr = UnsafePointer<xmlNs>
 
 private func castDoc(doc: DocumentPtr)->xmlDocPtr { return UnsafeMutablePointer<xmlDoc>(doc) }
 private func castNode(node: NodePtr)->xmlNodePtr { return UnsafeMutablePointer<xmlNode>(node) }
 private func castNs(ns: NamespacePtr)->xmlNsPtr { return UnsafeMutablePointer<xmlNs>(ns) }
 
 
-private var parserinit: Void = xmlInitParser() // lazy var that needs to be called to initialize libxml threads
-
 /// The root of an XML Document, containing a single root element
-public final class Document: Equatable, Hashable, DebugPrintable {
+public final class Document: Equatable, Hashable, CustomDebugStringConvertible {
     private let docPtr: DocumentPtr
     private var ownsDoc: Bool
 
 
     /// Creates a new Document with the given version string and root node
     public init(version: String? = nil, root: Node? = nil) {
-        let pinit: Void = parserinit // ensure lazy var is invoked
+        xmlInitParser()
+        precondition(xmlHasFeature(XML_WITH_THREAD) != 0)
+        xmlSetStructuredErrorFunc(nil) { ctx, err in } // squelch errors going to stdout
+        defer { xmlSetStructuredErrorFunc(nil, nil) }
+
         self.ownsDoc = true
         self.docPtr = version != nil ? DocumentPtr(xmlNewDoc(version!)) : DocumentPtr(xmlNewDoc(nil))
 
@@ -52,7 +46,6 @@ public final class Document: Equatable, Hashable, DebugPrintable {
     }
 
     private init(doc: DocumentPtr, owns: Bool) {
-        let pinit: Void = parserinit // ensure lazy var is invoked
         self.ownsDoc = owns
         self.docPtr = doc
     }
@@ -65,11 +58,16 @@ public final class Document: Equatable, Hashable, DebugPrintable {
 
     public var hashValue: Int { return 0 }
 
-    public func xpath(path: String, namespaces: [String:String]? = nil) -> XMLResult<[Node]> {
-        return rootElement.xpath(path, namespaces: namespaces)
+    /// Create a curried xpath finder with the given namespaces
+    public func xpath(ns: [String:String]? = nil, _ path: String) throws -> [Node] {
+        return try rootElement.xpath(path, namespaces: ns)
     }
 
-    public func serialize(indent: Bool = false, encoding: String? = "utf8") -> String {
+    public func xpath(path: String, namespaces: [String:String]? = nil) throws -> [Node] {
+        return try rootElement.xpath(path, namespaces: namespaces)
+    }
+
+    public func serialize(indent indent: Bool = false, encoding: String? = "utf8") -> String {
         var buf: UnsafeMutablePointer<xmlChar> = nil
         var buflen: Int32 = 0
         let format: Int32 = indent ? 1 : 0
@@ -82,8 +80,7 @@ public final class Document: Equatable, Hashable, DebugPrintable {
 
         var string: String = ""
         if buflen >= 0 {
-            let cchars: UnsafePointer<CChar> = UnsafePointer(buf)
-            if let str = stringFromFixedCString(cchars, Int(buflen)) {
+            if let str = stringFromFixedCString(UnsafeBufferPointer(start: UnsafePointer(buf), count: Int(buflen))) {
                 string = str
             }
             buf.dealloc(Int(buflen))
@@ -99,18 +96,29 @@ public final class Document: Equatable, Hashable, DebugPrintable {
     }
 
     /// Parses the XML contained in the given string, returning the Document or an Error
-    public class func parseString(xmlString: String, encoding: String? = nil) -> XMLResult<Document> {
-        return xmlString.withCString { self.parseData($0, length: Int(strlen($0))) }
+    public class func parseString(xmlString: String, encoding: String? = nil, html: Bool = false) throws -> Document {
+        var doc: Document?
+        var err: ErrorType?
+        // FIXME: withCString doesn't declare rethrows, so we need to hold value & error in bogus optionals
+        let _: Void = xmlString.withCString { str in
+            do {
+                doc = try self.parseData(str, length: Int(strlen(str)), html: html)
+            } catch {
+                err = error
+            }
+        }
+        if let err = err { throw err }
+        return doc!
     }
 
     /// Parses the XML contained in the given data, returning the Document or an Error
-    public class func parseData(xmlData: UnsafePointer<CChar>, length: Int, encoding: String? = nil) -> XMLResult<Document> {
-        return parse(XMLLoadSource.Data(data: xmlData, length: Int32(length)), encoding: encoding)
+    public class func parseData(xmlData: UnsafePointer<CChar>, length: Int, encoding: String? = nil, html: Bool = false) throws -> Document {
+        return try parse(.Data(data: xmlData, length: Int32(length)), encoding: encoding, html: html)
     }
 
     /// Parses the XML contained at the given filename, returning the Document or an Error
-    public class func parseFile(fileName: String, encoding: String? = nil) -> XMLResult<Document> {
-        return parse(.File(fileName: fileName), encoding: encoding)
+    public class func parseFile(fileName: String, encoding: String? = nil, html: Bool = false) throws -> Document {
+        return try parse(.File(fileName: fileName), encoding: encoding, html: html)
     }
 
     /// The source of the loading for the XML data
@@ -119,50 +127,66 @@ public final class Document: Equatable, Hashable, DebugPrintable {
         case Data(data: UnsafePointer<CChar>, length: Int32)
     }
 
-    private class func parse(source: XMLLoadSource, encoding: String?, stderr: Bool = false) -> XMLResult<Document> {
-        let pinit: Void = parserinit // ensure lazy var is invoked
+    private class func parse(source: XMLLoadSource, encoding: String?, html: Bool) throws -> Document {
+        xmlInitParser()
         precondition(xmlHasFeature(XML_WITH_THREAD) != 0)
+        xmlSetStructuredErrorFunc(nil) { ctx, err in } // squelch errors going to stdout
+        defer { xmlSetStructuredErrorFunc(nil, nil) }
 
-        // var x: xmlParserOption = XML_PARSE_NOCDATA
-        var opts : Int32 = 0
+        let opts : Int32 = Int32(XML_PARSE_NONET.rawValue)
 
-        let ctx = xmlNewParserCtxt()
-        var doc: xmlDocPtr?
-
-        if !stderr {
-            GlimpseXMLGenericErrorCallbackCreate(nil) // squelch errors from going to stderr
+        if html {
+            precondition(xmlHasFeature(XML_WITH_HTML) != 0)
         }
 
-        switch source {
-        case .File(let fileName):
-            if let encoding = encoding {
-                doc = xmlCtxtReadFile(ctx, fileName, encoding, Int32(opts))
+        let ctx = html ? htmlNewParserCtxt() : xmlNewParserCtxt()
+        defer {
+            if html {
+                htmlFreeParserCtxt(ctx)
             } else {
-                doc = xmlCtxtReadFile(ctx, fileName, nil, Int32(opts))
-            }
-        case .Data(let data, let length):
-            if let encoding = encoding {
-                doc = xmlCtxtReadMemory(ctx, data, length, nil, encoding, Int32(opts))
-            } else {
-                doc = xmlCtxtReadMemory(ctx, data, length, nil, nil, Int32(opts))
+                xmlFreeParserCtxt(ctx)
             }
         }
 
-        if !stderr {
-            GlimpseXMLGenericErrorCallbackDestroy() // clear the error handler
+        var doc: xmlDocPtr? // also htmlDocPtr: “Most of the back-end structures from XML and HTML are shared.”
+
+        switch (html, source) {
+        case (false, .File(let fileName)):
+            if let encoding = encoding {
+                doc = xmlCtxtReadFile(ctx, fileName, encoding, opts)
+            } else {
+                doc = xmlCtxtReadFile(ctx, fileName, nil, opts)
+            }
+        case (false, .Data(let data, let length)):
+            if let encoding = encoding {
+                doc = xmlCtxtReadMemory(ctx, data, length, nil, encoding, opts)
+            } else {
+                doc = xmlCtxtReadMemory(ctx, data, length, nil, nil, opts)
+            }
+        case (true, .File(let fileName)):
+            if let encoding = encoding {
+                doc = htmlCtxtReadFile(ctx, fileName, encoding, opts)
+            } else {
+                doc = htmlCtxtReadFile(ctx, fileName, nil, opts)
+            }
+        case (true, .Data(let data, let length)):
+            if let encoding = encoding {
+                doc = htmlCtxtReadMemory(ctx, data, length, nil, encoding, opts)
+            } else {
+                doc = htmlCtxtReadMemory(ctx, data, length, nil, nil, opts)
+            }
         }
 
         let err = errorFromXmlError(ctx.memory.lastError)
-        xmlFreeParserCtxt(ctx);
 
         if let doc = doc {
             if doc != nil { // unwrapped pointer can still be nil
                 let document = Document(doc: DocumentPtr(doc), owns: true)
-                return .Value(XMLValue(document))
+                return document
             }
         }
 
-        return .Error(err)
+        throw err
     }
 
 }
@@ -174,7 +198,7 @@ public func ==(lhs: Document, rhs: Document) -> Bool {
 
 
 /// A Node in an Document
-public final class Node: Equatable, Hashable, DebugPrintable {
+public final class Node: Equatable, Hashable, CustomDebugStringConvertible {
     private let nodePtr: NodePtr
     private var ownsNode: Bool
 
@@ -199,7 +223,7 @@ public final class Node: Equatable, Hashable, DebugPrintable {
 
         self.nodePtr = NodePtr(xmlNewDocNode(doc == nil ? nil : castDoc(doc!.docPtr), namespace == nil ? nil : castNs(namespace!.nsPtr), name ?? "", text ?? ""))
 
-        attributes?.map { self.updateAttribute($0, value: $1, namespace: namespace) }
+        let _ = attributes?.map { self.updateAttribute($0, value: $1, namespace: namespace) }
 
         if let children = children {
             self.children = children
@@ -238,6 +262,7 @@ public final class Node: Equatable, Hashable, DebugPrintable {
     /// The text content of the node
     public var text: String? {
         get { return stringFromXMLString(xmlNodeGetContent(castNode(nodePtr)), free: true) }
+
         set(value) {
             if let value = value {
                 xmlNodeSetContent(castNode(nodePtr), value)
@@ -302,15 +327,17 @@ public final class Node: Equatable, Hashable, DebugPrintable {
     public var children: [Node] {
         get {
             var nodes = [Node]()
-            for var child = castNode(nodePtr).memory.children; child != nil; child = child.memory.next {
+            var child = castNode(nodePtr).memory.children
+            while child != nil {
+                defer { child = child.memory.next }
                 nodes += [Node(node: NodePtr(child), owns: false)]
             }
             return nodes
         }
 
         set(newChildren) {
-            children.map { $0.detach() } // remove existing children from parent
-            newChildren.map { self.addChild($0) }
+            for child in children { child.detach() } // remove existing children from parent
+            for child in newChildren { addChild(child) }
         }
     }
 
@@ -386,34 +413,34 @@ public final class Node: Equatable, Hashable, DebugPrintable {
 
     /// The name of the type of node
     public var nodeType: String {
-        switch castNode(nodePtr).memory.type.value {
-        case XML_ELEMENT_NODE.value: return "Element"
-        case XML_ATTRIBUTE_NODE.value: return "Attribute"
-        case XML_TEXT_NODE.value: return "Text"
-        case XML_CDATA_SECTION_NODE.value: return "CDATA"
-        case XML_ENTITY_REF_NODE.value: return "EntityRef"
-        case XML_ENTITY_NODE.value: return "Entity"
-        case XML_PI_NODE.value: return "PI"
-        case XML_COMMENT_NODE.value: return "Comment"
-        case XML_DOCUMENT_NODE.value: return "Document"
-        case XML_DOCUMENT_TYPE_NODE.value: return "DocumentType"
-        case XML_DOCUMENT_FRAG_NODE.value: return "DocumentFrag"
-        case XML_NOTATION_NODE.value: return "Notation"
-        case XML_HTML_DOCUMENT_NODE.value: return "HTMLDocument"
-        case XML_DTD_NODE.value: return "DTD"
-        case XML_ELEMENT_DECL.value: return "ElementDecl"
-        case XML_ATTRIBUTE_DECL.value: return "AttributeDecl"
-        case XML_ENTITY_DECL.value: return "EntityDecl"
-        case XML_NAMESPACE_DECL.value: return "NamespaceDecl"
-        case XML_XINCLUDE_START.value: return "XIncludeStart"
-        case XML_XINCLUDE_END.value: return "XIncludeEnd"
-        case XML_DOCB_DOCUMENT_NODE.value: return "Document"
+        switch castNode(nodePtr).memory.type.rawValue {
+        case XML_ELEMENT_NODE.rawValue: return "Element"
+        case XML_ATTRIBUTE_NODE.rawValue: return "Attribute"
+        case XML_TEXT_NODE.rawValue: return "Text"
+        case XML_CDATA_SECTION_NODE.rawValue: return "CDATA"
+        case XML_ENTITY_REF_NODE.rawValue: return "EntityRef"
+        case XML_ENTITY_NODE.rawValue: return "Entity"
+        case XML_PI_NODE.rawValue: return "PI"
+        case XML_COMMENT_NODE.rawValue: return "Comment"
+        case XML_DOCUMENT_NODE.rawValue: return "Document"
+        case XML_DOCUMENT_TYPE_NODE.rawValue: return "DocumentType"
+        case XML_DOCUMENT_FRAG_NODE.rawValue: return "DocumentFrag"
+        case XML_NOTATION_NODE.rawValue: return "Notation"
+        case XML_HTML_DOCUMENT_NODE.rawValue: return "HTMLDocument"
+        case XML_DTD_NODE.rawValue: return "DTD"
+        case XML_ELEMENT_DECL.rawValue: return "ElementDecl"
+        case XML_ATTRIBUTE_DECL.rawValue: return "AttributeDecl"
+        case XML_ENTITY_DECL.rawValue: return "EntityDecl"
+        case XML_NAMESPACE_DECL.rawValue: return "NamespaceDecl"
+        case XML_XINCLUDE_START.rawValue: return "XIncludeStart"
+        case XML_XINCLUDE_END.rawValue: return "XIncludeEnd"
+        case XML_DOCB_DOCUMENT_NODE.rawValue: return "Document"
         default: return "Unknown"
         }
     }
 
     /// Returns this node as an XML string with optional indentation
-    public func serialize(indent: Bool = false) -> String {
+    public func serialize(indent indent: Bool = false) -> String {
         let buf = xmlBufferCreate()
 
         let level: Int32 = 0
@@ -425,8 +452,7 @@ public final class Node: Equatable, Hashable, DebugPrintable {
         if result >= 0 {
             let buflen: Int32 = xmlBufferLength(buf)
             let str: UnsafePointer<CUnsignedChar> = xmlBufferContent(buf)
-            let cchars: UnsafePointer<CChar> = UnsafePointer(str)
-            if let str = stringFromFixedCString(cchars, Int(buflen)) {
+            if let str = stringFromFixedCString(UnsafeBufferPointer(start: UnsafePointer(str), count: Int(buflen))) {
                 string = str
             }
         }
@@ -437,7 +463,7 @@ public final class Node: Equatable, Hashable, DebugPrintable {
 
     /// The owning document for the node, if any
     public var document: Document? {
-        var docPtr = castNode(nodePtr).memory.doc
+        let docPtr = castNode(nodePtr).memory.doc
         return docPtr == nil ? nil : Document(doc: DocumentPtr(docPtr), owns: false)
     }
 
@@ -446,13 +472,7 @@ public final class Node: Equatable, Hashable, DebugPrintable {
     }
 
     /// Evaluates the given xpath and returns matching nodes
-    public func xpath(path: String, namespaces: [String:String]? = nil) -> XMLResult<[Node]> {
-
-        GlimpseXMLGenericErrorCallbackCreate(nil) // squelch errors from going to stderr
-        var cleanup: (XMLResult<[Node]>)->XMLResult<[Node]> = {
-            GlimpseXMLGenericErrorCallbackDestroy() // clear the error handler
-            return $0
-        }
+    public func xpath(path: String, namespaces: [String:String]? = nil) throws -> [Node] {
 
         // xmlXPathNewContext requires that a node be part of a document; host it inside a temporary one if it is standalone
         var nodeDoc = castNode(nodePtr).memory.doc
@@ -465,48 +485,48 @@ public final class Node: Equatable, Hashable, DebugPrintable {
             xmlDocSetRootElement(nodeDoc, topParent)
 
             // release our temporary document when we are done
-            cleanup = {
+            defer {
                 xmlUnlinkNode(topParent)
                 xmlSetTreeDoc(topParent, nil)
                 xmlFreeDoc(nodeDoc)
-                GlimpseXMLGenericErrorCallbackDestroy()
-                return $0
             }
         }
 
         let xpathCtx = xmlXPathNewContext(nodeDoc)
+        defer { xmlXPathFreeContext(xpathCtx) }
 
-        if xpathCtx != nil {
-            if let namespaces = namespaces {
-                for (prefix, uri) in namespaces {
-                    xmlXPathRegisterNs(xpathCtx, prefix, uri)
-                }
-            }
+        if xpathCtx == nil {
+            throw XMLError(message: "Could not create XPath context")
+        }
 
-            let xpathObj = xmlXPathNodeEval(castNode(nodePtr), path, xpathCtx)
-            if xpathObj != nil {
-                var results = [Node]()
-                let nodeSet = xpathObj.memory.nodesetval
-                if nodeSet != nil {
-                    for var index = 0, count = Int(nodeSet.memory.nodeNr); index < count; index++ {
-                        let node = nodeSet.memory.nodeTab[index]
-                        if node != nil {
-                            results += [Node(node: NodePtr(node), owns: false)]
-                        }
-                    }
-                }
-                xmlXPathFreeObject(xpathObj)
-                xmlXPathFreeContext(xpathCtx)
-                return cleanup(.Value(XMLValue(results)))
-            } else {
-                let lastError = xpathCtx.memory.lastError
-                let error = errorFromXmlError(lastError)
-                xmlXPathFreeContext(xpathCtx)
-                return cleanup(.Error(error))
+        if let namespaces = namespaces {
+            for (prefix, uri) in namespaces {
+                xmlXPathRegisterNs(xpathCtx, prefix, uri)
             }
         }
 
-        return cleanup(.Error(XMLError(message: "Unknown XPath error")))
+        let xpathObj = xmlXPathNodeEval(castNode(nodePtr), path, xpathCtx)
+        if xpathObj == nil {
+            let lastError = xpathCtx.memory.lastError
+            let error = errorFromXmlError(lastError)
+            throw error
+        }
+        defer { xmlXPathFreeObject(xpathObj) }
+
+        var results = [Node]()
+        let nodeSet = xpathObj.memory.nodesetval
+        if nodeSet != nil {
+            let count = Int(nodeSet.memory.nodeNr)
+            var index = 0
+            while index < count {
+                defer { index += 1 }
+                let node = nodeSet.memory.nodeTab[index]
+                if node != nil {
+                    results += [Node(node: NodePtr(node), owns: false)]
+                }
+            }
+        }
+        return results
     }
 }
 
@@ -529,11 +549,11 @@ private func errorFromXmlError(error: xmlError)->XMLError {
 }
 
 private func errorLevelFromXmlErrorLevel(level: xmlErrorLevel) -> XMLError.ErrorLevel {
-    switch level.value {
-    case XML_ERR_NONE.value: return .None
-    case XML_ERR_WARNING.value: return .Warning
-    case XML_ERR_ERROR.value: return .Error
-    case XML_ERR_FATAL.value: return .Fatal
+    switch level.rawValue {
+    case XML_ERR_NONE.rawValue: return .None
+    case XML_ERR_WARNING.rawValue: return .Warning
+    case XML_ERR_ERROR.rawValue: return .Error
+    case XML_ERR_FATAL.rawValue: return .Fatal
     default: return .None
     }
 }
@@ -572,7 +592,7 @@ public class Namespace {
 /// MARK: General Utilities
 
 /// The result of an XML operation, which may be a T or an Error condition
-public enum XMLResult<T>: DebugPrintable {
+public enum XMLResult<T>: CustomDebugStringConvertible {
     case Value(XMLValue<T>)
     case Error(XMLError)
 
@@ -586,13 +606,13 @@ public enum XMLResult<T>: DebugPrintable {
     public var value: T? {
         switch self {
         case .Value(let v): return v.value
-        case .Error(let e): return nil
+        case .Error: return nil
         }
     }
 
     public var error: XMLError? {
         switch self {
-        case .Value(let v): return nil
+        case .Value: return nil
         case .Error(let e): return e
         }
     }
@@ -606,8 +626,9 @@ public class XMLValue<T> {
 }
 
 // A stuctured XML parse of processing error
-public struct XMLError: DebugPrintable {
-    public enum ErrorLevel: DebugPrintable {
+public struct XMLError: CustomDebugStringConvertible {
+
+    public enum ErrorLevel: CustomDebugStringConvertible {
         case None, Warning, Error, Fatal
 
         public var debugDescription: String {
@@ -621,7 +642,7 @@ public struct XMLError: DebugPrintable {
     }
 
     /// The domain (type) of error that occurred
-    public enum ErrorDomain: UInt, DebugPrintable {
+    public enum ErrorDomain: UInt, CustomDebugStringConvertible {
         case None, Parser, Tree, Namespace, DTD, HTML, Memory, Output, IO, FTP, HTTP, XInclude, XPath, XPointer, Regexp, Datatype, SchemasP, SchemasV, RelaxNGP, RelaxNGV, Catalog, C14N, XSLT, Valid, Check, Writer, Module, I18N, SchematronV, Buffer, URI
 
         public var debugDescription: String {
@@ -721,6 +742,12 @@ public struct XMLError: DebugPrintable {
     }
 }
 
+extension XMLError: ErrorType {
+    // FIXME: needed for ErrorType conformance in Swift 2 beta
+    public var _domain: String { return domain.debugDescription }
+    public var _code: Int { return Int(code) }
+}
+
 private func stringFromXMLString(string: UnsafePointer<xmlChar>, free: Bool = false) -> String? {
     let str = String.fromCString(UnsafePointer(string))
     if free {
@@ -729,13 +756,10 @@ private func stringFromXMLString(string: UnsafePointer<xmlChar>, free: Bool = fa
     return str
 }
 
-private func stringFromFixedCString(cs: UnsafePointer<CChar>, length: Int) -> String? {
-    // taken from <http://stackoverflow.com/questions/25042695/swift-converting-from-unsafepointeruint8-with-length-to-string>
-    let buflen = length + 1
-    var buf = UnsafeMutablePointer<CChar>.alloc(buflen)
-    memcpy(buf, cs, length)
-    buf[length] = 0 // zero terminate
-    let s = String.fromCString(buf)
-    buf.dealloc(buflen)
+private func stringFromFixedCString(cs: UnsafeBufferPointer<CChar>) -> String? {
+    let buf = UnsafeMutablePointer<CChar>.alloc(cs.count + 1)
+    buf.initializeFrom(cs + [0]) // tack on a zero to make it a valid c string
+    let (s, _) = String.fromCStringRepairingIllFormedUTF8(buf)
+    buf.dealloc(cs.count + 1)
     return s
 }
