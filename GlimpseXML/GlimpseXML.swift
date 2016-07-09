@@ -113,18 +113,18 @@ public final class Document: Equatable, Hashable, CustomDebugStringConvertible {
 
     /// Parses the XML contained in the given data, returning the Document or an Error
     public class func parseData(xmlData: UnsafePointer<CChar>, length: Int, encoding: String? = nil, html: Bool = false) throws -> Document {
-        return try parse(.Data(data: xmlData, length: Int32(length)), encoding: encoding, html: html)
+        return try parse(.data(data: xmlData, length: Int32(length)), encoding: encoding, html: html)
     }
 
     /// Parses the XML contained at the given filename, returning the Document or an Error
     public class func parseFile(fileName: String, encoding: String? = nil, html: Bool = false) throws -> Document {
-        return try parse(.File(fileName: fileName), encoding: encoding, html: html)
+        return try parse(.file(fileName: fileName), encoding: encoding, html: html)
     }
 
     /// The source of the loading for the XML data
     enum XMLLoadSource {
-        case File(fileName: String)
-        case Data(data: UnsafePointer<CChar>, length: Int32)
+        case file(fileName: String)
+        case data(data: UnsafePointer<CChar>, length: Int32)
     }
 
     private class func parse(source: XMLLoadSource, encoding: String?, html: Bool) throws -> Document {
@@ -151,25 +151,25 @@ public final class Document: Equatable, Hashable, CustomDebugStringConvertible {
         var doc: xmlDocPtr? // also htmlDocPtr: “Most of the back-end structures from XML and HTML are shared.”
 
         switch (html, source) {
-        case (false, .File(let fileName)):
+        case (false, .file(let fileName)):
             if let encoding = encoding {
                 doc = xmlCtxtReadFile(ctx, fileName, encoding, opts)
             } else {
                 doc = xmlCtxtReadFile(ctx, fileName, nil, opts)
             }
-        case (false, .Data(let data, let length)):
+        case (false, .data(let data, let length)):
             if let encoding = encoding {
                 doc = xmlCtxtReadMemory(ctx, data, length, nil, encoding, opts)
             } else {
                 doc = xmlCtxtReadMemory(ctx, data, length, nil, nil, opts)
             }
-        case (true, .File(let fileName)):
+        case (true, .file(let fileName)):
             if let encoding = encoding {
                 doc = htmlCtxtReadFile(ctx, fileName, encoding, opts)
             } else {
                 doc = htmlCtxtReadFile(ctx, fileName, nil, opts)
             }
-        case (true, .Data(let data, let length)):
+        case (true, .data(let data, let length)):
             if let encoding = encoding {
                 doc = htmlCtxtReadMemory(ctx, data, length, nil, encoding, opts)
             } else {
@@ -550,11 +550,11 @@ private func errorFromXmlError(error: xmlError)->XMLError {
 
 private func errorLevelFromXmlErrorLevel(level: xmlErrorLevel) -> XMLError.ErrorLevel {
     switch level.rawValue {
-    case XML_ERR_NONE.rawValue: return .None
-    case XML_ERR_WARNING.rawValue: return .Warning
-    case XML_ERR_ERROR.rawValue: return .Error
-    case XML_ERR_FATAL.rawValue: return .Fatal
-    default: return .None
+    case XML_ERR_NONE.rawValue: return .none
+    case XML_ERR_WARNING.rawValue: return .warning
+    case XML_ERR_ERROR.rawValue: return .error
+    case XML_ERR_FATAL.rawValue: return .fatal
+    default: return .none
     }
 }
 
@@ -593,27 +593,27 @@ public class Namespace {
 
 /// The result of an XML operation, which may be a T or an Error condition
 public enum XMLResult<T>: CustomDebugStringConvertible {
-    case Value(XMLValue<T>)
-    case Error(XMLError)
+    case value(XMLValue<T>)
+    case error(XMLError)
 
     public var debugDescription: String {
         switch self {
-        case .Value(let v): return "value: \(v)"
-        case .Error(let e): return "error: \(e)"
+        case .value(let v): return "value: \(v)"
+        case .error(let e): return "error: \(e)"
         }
     }
 
     public var value: T? {
         switch self {
-        case .Value(let v): return v.value
-        case .Error: return nil
+        case .value(let v): return v.value
+        case .error: return nil
         }
     }
 
     public var error: XMLError? {
         switch self {
-        case .Value: return nil
-        case .Error(let e): return e
+        case .value: return nil
+        case .error(let e): return e
         }
     }
 
@@ -629,60 +629,60 @@ public class XMLValue<T> {
 public struct XMLError: CustomDebugStringConvertible {
 
     public enum ErrorLevel: CustomDebugStringConvertible {
-        case None, Warning, Error, Fatal
+        case none, warning, error, fatal
 
         public var debugDescription: String {
             switch self {
-            case None: return "None"
-            case Warning: return "Warning"
-            case Error: return "Error"
-            case Fatal: return "Fatal"
+            case none: return "None"
+            case warning: return "Warning"
+            case error: return "Error"
+            case fatal: return "Fatal"
             }
         }
     }
 
     /// The domain (type) of error that occurred
     public enum ErrorDomain: UInt, CustomDebugStringConvertible {
-        case None, Parser, Tree, Namespace, DTD, HTML, Memory, Output, IO, FTP, HTTP, XInclude, XPath, XPointer, Regexp, Datatype, SchemasP, SchemasV, RelaxNGP, RelaxNGV, Catalog, C14N, XSLT, Valid, Check, Writer, Module, I18N, SchematronV, Buffer, URI
+        case none, parser, tree, namespace, DTD, HTML, memory, output, IO, FTP, HTTP, xInclude, xPath, xPointer, regexp, datatype, schemasP, schemasV, relaxNGP, relaxNGV, catalog, C14N, XSLT, valid, check, writer, module, I18N, schematronV, buffer, URI
 
         public var debugDescription: String {
             switch self {
-            case None: return "None"
-            case Parser: return "Parser"
-            case Tree: return "Tree"
-            case Namespace: return "Namespace"
+            case none: return "None"
+            case parser: return "Parser"
+            case tree: return "Tree"
+            case namespace: return "Namespace"
             case DTD: return "DTD"
             case HTML: return "HTML"
-            case Memory: return "Memory"
-            case Output: return "Output"
+            case memory: return "Memory"
+            case output: return "Output"
             case IO: return "IO"
             case FTP: return "FTP"
             case HTTP: return "HTTP"
-            case XInclude: return "XInclude"
-            case XPath: return "XPath"
-            case XPointer: return "XPointer"
-            case Regexp: return "Regexp"
-            case Datatype: return "Datatype"
-            case SchemasP: return "SchemasP"
-            case SchemasV: return "SchemasV"
-            case RelaxNGP: return "RelaxNGP"
-            case RelaxNGV: return "RelaxNGV"
-            case Catalog: return "Catalog"
+            case xInclude: return "XInclude"
+            case xPath: return "XPath"
+            case xPointer: return "XPointer"
+            case regexp: return "Regexp"
+            case datatype: return "Datatype"
+            case schemasP: return "SchemasP"
+            case schemasV: return "SchemasV"
+            case relaxNGP: return "RelaxNGP"
+            case relaxNGV: return "RelaxNGV"
+            case catalog: return "Catalog"
             case C14N: return "C14N"
             case XSLT: return "XSLT"
-            case Valid: return "Valid"
-            case Check: return "Check"
-            case Writer: return "Writer"
-            case Module: return "Module"
+            case valid: return "Valid"
+            case check: return "Check"
+            case writer: return "Writer"
+            case module: return "Module"
             case I18N: return "I18N"
-            case SchematronV: return "SchematronV"
-            case Buffer: return "Buffer"
+            case schematronV: return "SchematronV"
+            case buffer: return "Buffer"
             case URI: return "URI"
             }
         }
 
         public static func fromErrorDomain(domain: Int32) -> ErrorDomain {
-            return ErrorDomain(rawValue: UInt(domain)) ?? .None
+            return ErrorDomain(rawValue: UInt(domain)) ?? .none
         }
     }
 
@@ -734,7 +734,7 @@ public struct XMLError: CustomDebugStringConvertible {
     }
 
     public init(message: String) {
-        self.init(domain: ErrorDomain.None, code: 0, message: message, level: ErrorLevel.Fatal, file: "", line: 0, str1: "", str2: "", str3: "", int1: 0, column: 0)
+        self.init(domain: ErrorDomain.none, code: 0, message: message, level: ErrorLevel.fatal, file: "", line: 0, str1: "", str2: "", str3: "", int1: 0, column: 0)
     }
 
     public var debugDescription: String {
